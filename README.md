@@ -1,170 +1,178 @@
-# CoC War Bot
+# Clan Warden — Clash of Clans Telegram Bot
 
-[![CI](https://github.com/SeredaVitaliy/coc-war-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/SeredaVitaliy/coc-war-bot/actions/workflows/ci.yml)
+[![CI](https://github.com/SeredaVitaliy/clan-warden/actions/workflows/ci.yml/badge.svg)](https://github.com/SeredaVitaliy/clan-warden/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-Self-hosted Telegram-бот для кланов **Clash of Clans**. Следит за клановыми войнами и Лигой войн кланов (ЛВК) через официальный API, присылает в группу клана старт войны, напоминание со списком тех, кто ещё не атаковал (с упоминаниями), и итоги. Игрокам может напоминать лично.
+**English** · [Русский](README.ru.md)
 
-Бот ставится одной командой на свой сервер: `docker compose up -d`.
+A self-hosted **Telegram bot for Clash of Clans** clans. Clan Warden tracks your **clan wars** and **Clan War League (CWL)** through the official Clash of Clans API. It posts to your clan's Telegram group when a war starts, sends a reminder with the list of players who haven't attacked yet (with clickable mentions), and posts the results. It can also remind each player privately.
 
-## Возможности
+You run it on your own server with a single command: `docker compose up -d`.
 
-- **Уведомления в группу:** соперник найден → война началась (с правилами клана) → «до конца N часов, не атаковали: …» → итоги.
-- **Упоминания:** игроки привязывают свой аккаунт игры к Telegram, и бот зовёт именно тех, у кого остались атаки.
-- **Личные напоминания:** если у твоего аккаунта осталась атака, бот напишет тебе в личку.
-- **ЛВК:** текущий раунд с правильным определением соперника и таблица группы с бонусом +10 звёзд за победу.
-- **Несколько кланов:** один запущенный бот может обслуживать несколько групп, у каждой свой клан и свои настройки.
-- **Темы (форумы):** бот работает только в выбранной теме и не мешает остальной переписке.
-- **Подтверждение аккаунта:** чужой тег нельзя «занять»: владение подтверждается API-токеном из настроек игры.
-- **Устойчивость:** журнал отправленных уведомлений в базе, поэтому после перезапуска бот не продублирует «Война началась!» и не пропустит напоминание.
-- **Понятные ошибки:** закрытый журнал войн, неверный IP ключа, техобслуживание игры — человек видит, что случилось и что делать.
+## Features
 
-## Как это выглядит
+- **Group notifications:** opponent found → war started (with your clan rules) → "N hours left, these players haven't attacked: …" → results.
+- **Mentions:** players link their game account to Telegram, so the bot pings exactly the people who still have attacks left.
+- **Personal reminders:** if your account still has an attack, the bot messages you privately.
+- **Clan War League:** the current round with the correct opponent, plus group standings with the +10 stars war-win bonus.
+- **Many clans, one bot:** a single running bot can serve several groups, each with its own clan and settings.
+- **Forum topics:** the bot can be limited to one topic so it doesn't get in the way of other conversations.
+- **Account verification:** nobody can claim someone else's tag; ownership is proven with the API token from the game settings.
+- **Reliable:** delivered notifications are journaled in the database, so a restart never duplicates "The war has started!" and never misses a reminder.
+- **Clear errors:** a private war log, a wrong API key IP, or game maintenance — people see what happened and what to do.
+- **English and Russian:** each group and each user picks a language; the bot defaults to the user's Telegram language.
 
-```
-⏰ До конца войны 2ч 41м!
-Legion vs Dark Empire · КВ, 15×15
-
-❗ Ещё не атаковали:
-4. Alex — осталось 2        ← имя кликабельное, Telegram пришлёт уведомление
-9. Snow — осталось 1
-12. Maria — осталось 1
-
-Без привязки к Telegram: 1. Привязать: /link #ТЕГ
-```
+## What it looks like
 
 ```
-🏆 Лига войн кланов · сезон 2026-11 · раунд 3/7
+⏰ 2h 41m left in the war!
+Legion vs Dark Empire · War, 15×15
 
-⚔️ День атак
-Legion vs Raiders · ЛВК, раунд 3, 15×15
-⏳ До конца войны: 11ч 5м
+❗ Haven't attacked yet:
+4. Alex — 2 left        ← clickable name, Telegram notifies the player
+9. Snow — 1 left
+12. Maria — 1 left
+
+Not linked to Telegram: 1. Link with /link #TAG
+```
+
+```
+🏆 Clan War League · season 2026-11 · round 3/7
+
+⚔️ Battle day
+Legion vs Raiders · CWL, round 3, 15×15
+⏳ War ends in: 11h 5m
 
 ⭐ 21 : 18   💥 74.3% : 65.0%
-🗡 Атаки: 9/15 : 8/15
+🗡 Attacks: 9/15 : 8/15
 ```
 
-## Установка
+## Installation
 
-Понадобится сервер с постоянным IP (подойдёт самый дешёвый VPS) и Docker.
+You need a server with a static IP (the cheapest VPS is enough) and Docker.
 
-### 1. Токен Telegram-бота
+### 1. Telegram bot token
 
-Напишите [@BotFather](https://t.me/BotFather) → `/newbot` → сохраните токен.
+Message [@BotFather](https://t.me/BotFather) → `/newbot` → save the token.
 
-### 2. Ключ Clash of Clans API
+### 2. Clash of Clans API key
 
-1. Узнайте внешний IP сервера: `curl -4 ifconfig.me`.
-2. Зарегистрируйтесь на [developer.clashofclans.com](https://developer.clashofclans.com) → *My Account* → *Create New Key*.
-3. В поле *Allowed IP addresses* укажите IP сервера.
+1. Find your server's public IP: `curl -4 ifconfig.me`.
+2. Sign up at [developer.clashofclans.com](https://developer.clashofclans.com) → *My Account* → *Create New Key*.
+3. Put the server's IP in *Allowed IP addresses*.
 
-> Ключ работает только с тех IP, которые в нём указаны. Это самая частая причина, почему бот «не видит» войну.
+> A key only works from the IPs listed in it. This is the most common reason the bot "can't see" a war.
 
-### 3. Запуск
+### 3. Run
 
 ```bash
-git clone https://github.com/SeredaVitaliy/coc-war-bot.git
-cd coc-war-bot
+git clone https://github.com/SeredaVitaliy/clan-warden.git
+cd clan-warden
 cp .env.example .env
-nano .env          # вставьте TELEGRAM_BOT_TOKEN и COC_API_TOKEN
+nano .env          # set TELEGRAM_BOT_TOKEN and COC_API_TOKEN
 
-docker compose run --rm bot python -m cocbot check   # проверка токенов
+docker compose run --rm bot python -m clanwarden check   # verify the tokens
 docker compose up -d
-docker compose logs -f                               # логи
+docker compose logs -f                                   # logs
 ```
 
-### 4. Подключение к клану
+### 4. Connect your clan
 
-1. Добавьте бота в группу клана.
-2. Админ группы пишет `/setclan #ТЕГ_КЛАНА`.
-3. Если в группе включены темы, напишите `/settopic` в нужной теме.
-4. Игроки привязывают аккаунты: `/link #ТЕГ_ИГРОКА`, а для личных напоминаний пишут боту `/start` в личку.
+1. Add the bot to your clan's Telegram group.
+2. A group admin sends `/setclan #CLAN_TAG`. The group language is taken from that admin's Telegram language; change it any time with `/language`.
+3. If the group uses topics, send `/settopic` in the topic the bot should use.
+4. Players link their accounts with `/link #PLAYER_TAG`. To get personal reminders, they also send `/start` to the bot in private.
 
-Журнал войн клана должен быть **открыт** (клан → Настройки), иначе API не отдаёт данные о войне.
+The clan's **war log must be public** (Clan → Edit), otherwise the API doesn't return war data.
 
-### Обновление
+### Updating
 
 ```bash
 docker compose pull && docker compose up -d
 ```
 
-### Без Docker
+### Without Docker
 
-Нужен Python 3.11+.
+Requires Python 3.11+.
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env   # заполнить
-python -m cocbot
+cp .env.example .env   # fill it in
+python -m clanwarden
 ```
 
-Для постоянной работы оформите это как systemd-сервис.
+For a long-running setup, wrap it in a systemd service.
 
-## Команды
+## Commands
 
-| Команда | Где | Что делает |
+| Command | Where | What it does |
 |---|---|---|
-| `/war` | везде | текущая война или раунд ЛВК: счёт, атаки, время |
-| `/missed` | везде | кто ещё не провёл атаки |
-| `/cwl` · `/cwltable` | везде | раунд ЛВК · таблица группы |
-| `/me` | везде | мои аккаунты и мои атаки в текущей войне |
-| `/link #ТЕГ [ТОКЕН]` | везде | привязать аккаунт (с токеном — подтверждённо) |
-| `/unlink [#ТЕГ]` | везде | отвязать аккаунт |
-| `/notify` | везде | включить/выключить личные напоминания |
-| `/menu` | везде | всё то же самое кнопками |
-| `/setclan #ТЕГ` | группа, админ | привязать клан к группе |
-| `/settopic` · `/unsettopic` | группа, админ | работать только в этой теме / во всём чате |
-| `/settings` | группа, админ | какие уведомления слать, за сколько часов напоминать, упоминания, автоудаление ответов |
-| `/setrules текст` | группа, админ | правила клана, бот покажет их в начале войны |
-| `/checklinks` | группа, админ | кто из клана не привязал аккаунт |
+| `/war` | anywhere | current war or CWL round: score, attacks, time left |
+| `/missed` | anywhere | who hasn't used their attacks yet |
+| `/cwl` · `/cwltable` | anywhere | CWL round · group standings |
+| `/me` | anywhere | my accounts and my attacks in the current war |
+| `/link #TAG [TOKEN]` | anywhere | link an account (with a token, verified) |
+| `/unlink [#TAG]` | anywhere | unlink an account |
+| `/notify` | anywhere | personal reminders on/off |
+| `/language` | anywhere | bot language (for a group: admins only) |
+| `/menu` | anywhere | everything above as buttons |
+| `/setclan #TAG` | group, admin | connect a clan to the group |
+| `/settopic` · `/unsettopic` | group, admin | work only in this topic / in the whole chat |
+| `/settings` | group, admin | which notifications to send, reminder timing, mentions, auto-delete of replies |
+| `/setrules text` | group, admin | clan rules shown when a war starts |
+| `/checklinks` | group, admin | clan members who haven't linked their account |
 
-В личке `/war`, `/missed`, `/cwl` работают для клана вашего привязанного аккаунта, либо укажите тег: `/war #ТЕГ`.
+In private chat, `/war`, `/missed` and `/cwl` use the clan of your linked account, or pass a tag: `/war #TAG`.
 
-## Переменные окружения
+## Configuration
 
-| Переменная | По умолчанию | Описание |
+| Variable | Default | Description |
 |---|---|---|
-| `TELEGRAM_BOT_TOKEN` | — | токен от @BotFather, **обязательно** |
-| `COC_API_TOKEN` | — | ключ developer.clashofclans.com, **обязательно** |
-| `POLL_INTERVAL_SECONDS` | `120` | как часто опрашивать API (минимум 30) |
-| `DATABASE_PATH` | `data/cocbot.db` | путь к SQLite-базе |
-| `LOG_LEVEL` | `INFO` | уровень логов |
-| `COC_API_BASE_URL` | `https://api.clashofclans.com/v1` | можно указать прокси к API |
-| `CLAN_TAG`, `GROUP_CHAT_ID`, `GROUP_THREAD_ID` | — | быстрая настройка одного клана без `/setclan` |
+| `TELEGRAM_BOT_TOKEN` | — | token from @BotFather, **required** |
+| `COC_API_TOKEN` | — | key from developer.clashofclans.com, **required** |
+| `POLL_INTERVAL_SECONDS` | `120` | how often to poll the API (minimum 30) |
+| `DATABASE_PATH` | `data/clanwarden.db` | SQLite database path |
+| `LOG_LEVEL` | `INFO` | log level |
+| `COC_API_BASE_URL` | `https://api.clashofclans.com/v1` | point to a proxy if your server has no static IP |
+| `CLAN_TAG`, `GROUP_CHAT_ID`, `GROUP_THREAD_ID` | — | single-clan quick setup without `/setclan` |
 
-## Частые проблемы
+## Troubleshooting
 
-**`ключ не разрешён для IP этого сервера`** — ключ создан для другого IP. Запустите `python -m cocbot check`: в ответе API будет IP, с которого пришёл запрос. Создайте ключ для него.
+**"the key doesn't allow this server's IP"** — the key was created for a different IP. Run `python -m clanwarden check`: the API response includes the IP the request came from. Create a key for that IP.
 
-**«Журнал войн клана закрыт»** — глава или соруководитель открывает его в настройках клана.
+**"The clan's war log is private"** — a leader or co-leader makes it public in the clan settings.
 
-**Бот не пишет в личку** — Telegram не разрешает ботам писать первыми. Нужно один раз отправить боту `/start`.
+**The bot doesn't message me privately** — Telegram doesn't let bots start a conversation. Send `/start` to the bot once.
 
-**Бот не отвечает в группе** — проверьте, не привязан ли он к другой теме (`/settings` покажет).
+**The bot doesn't reply in the group** — it may be bound to another topic; `/settings` shows where it works.
 
-## Переход со старой версии
+## Migrating from the old single-file version
 
-Старая версия хранила привязки в `links.db`. Перенести их:
+The old version stored links in `links.db`. To import them:
 
 ```bash
-python scripts/import_legacy.py links.db data/cocbot.db
+python scripts/import_legacy.py links.db data/clanwarden.db
 ```
 
-Группу и клан из старого `.env` (`CLAN_TAG`, `GROUP_CHAT_ID`, `GROUP_THREAD_ID`) новая версия подхватит сама при первом запуске.
+The group and clan from the old `.env` (`CLAN_TAG`, `GROUP_CHAT_ID`, `GROUP_THREAD_ID`) are picked up automatically on first start.
 
-## Разработка
+## Development
 
 ```bash
 pip install -r requirements-dev.txt
-pytest            # тесты
-ruff check .      # линтер
-ruff format .     # форматирование
+pytest            # tests
+ruff check .      # linter
+ruff format .     # formatter
 ```
 
-Как устроен проект и почему так: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+How the project is built and why: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-## Лицензия
+### Adding a language
 
-[MIT](LICENSE). Проект не связан с Supercell. Clash of Clans — торговая марка Supercell.
+Copy `clanwarden/i18n/en.py` to e.g. `de.py`, translate the values, and register it in `clanwarden/i18n/__init__.py`. A test checks that every catalog has the same keys and placeholders as English.
+
+## License
+
+[MIT](LICENSE). This project is not affiliated with, endorsed, sponsored, or specifically approved by Supercell. Clash of Clans is a trademark of Supercell.
