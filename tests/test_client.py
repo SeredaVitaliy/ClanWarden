@@ -1,10 +1,10 @@
-"""Клиент против локального фейкового сервера: коды ошибок и кэш."""
+"""The client against a local fake server: error codes and caching."""
 
 import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestServer
 
-from cocbot.coc.client import AccessDenied, CocClient, InvalidIp, NotFound
+from clanwarden.coc.client import AccessDenied, CocClient, InvalidIp, NotFound
 from tests.factories import war_json
 
 
@@ -45,8 +45,8 @@ async def test_current_war_and_cache(api):
     client, calls = api
     war = await client.get_current_war("#OURS")
     await client.get_current_war("#OURS")
-    assert war.clan.name == "Наши"
-    assert calls["/v1/clans/#OURS/currentwar"] == 1  # второй раз — из кэша
+    assert war.clan.name == "Our Clan"
+    assert calls["/v1/clans/#OURS/currentwar"] == 1  # second call is served from cache
 
 
 async def test_error_mapping(api):

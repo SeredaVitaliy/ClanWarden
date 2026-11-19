@@ -1,12 +1,12 @@
-"""Асинхронный клиент Clash of Clans API.
+"""Async Clash of Clans API client.
 
-Что он берёт на себя:
-- превращает HTTP-ошибки в понятные исключения (закрытый журнал войн,
-  неверный IP ключа, техобслуживание), чтобы бот мог ответить человеку
-  по-человечески, а не "что-то пошло не так";
-- кэширует ответы на короткое время: несколько команд подряд или несколько
-  групп с одним кланом не тратят лимиты API;
-- кэширует навсегда завершённые войны ЛВК — они уже не изменятся.
+What it takes care of:
+- turns HTTP errors into meaningful exceptions (private war log, key not
+  allowed for this IP, maintenance) so the bot can tell people what's wrong
+  instead of "something went wrong";
+- caches responses briefly: several commands in a row, or several groups
+  following the same clan, don't burn through API limits;
+- caches finished CWL wars forever — they can't change anymore.
 """
 
 from __future__ import annotations
@@ -18,8 +18,8 @@ from typing import Any
 
 import aiohttp
 
-from cocbot.coc.models import Clan, CwlGroup, Player, War, WarState
-from cocbot.coc.tags import encode_tag
+from clanwarden.coc.models import Clan, CwlGroup, Player, War, WarState
+from clanwarden.coc.tags import encode_tag
 
 log = logging.getLogger(__name__)
 
@@ -33,19 +33,19 @@ class CocApiError(Exception):
 
 
 class NotFound(CocApiError):
-    """Клан/игрок не существует (или клан не участвует в ЛВК)."""
+    """Clan/player doesn't exist (or the clan isn't in CWL)."""
 
 
 class AccessDenied(CocApiError):
-    """Чаще всего — закрытый журнал войн клана."""
+    """Usually the clan's war log is private."""
 
 
 class InvalidIp(CocApiError):
-    """Ключ API не разрешён для IP этого сервера. Это ошибка настройки, а не пользователя."""
+    """The API key doesn't allow this server's IP. A setup error, not a user error."""
 
 
 class Maintenance(CocApiError):
-    """Игра на техобслуживании."""
+    """The game is under maintenance."""
 
 
 class RateLimited(CocApiError):
@@ -84,7 +84,7 @@ class CocClient:
         self._session: aiohttp.ClientSession | None = None
         self._cache: dict[str, tuple[float, Any]] = {}
         self._ended_cwl_wars: dict[str, War] = {}
-        # Одинаковые одновременные запросы склеиваем в один.
+        # Identical concurrent requests are merged into one.
         self._inflight: dict[str, asyncio.Future] = {}
 
     async def __aenter__(self) -> CocClient:
@@ -134,16 +134,16 @@ class CocClient:
             return data
         except Exception as exc:
             future.set_exception(exc)
-            # Исключение уже проброшено вызывающему; глушим "never retrieved".
+            # The caller already got the exception; silence "exception was never retrieved".
             future.exception()
             raise
         finally:
             self._inflight.pop(path, None)
 
-    # --- публичные методы ---
+    # --- public methods ---
 
     async def ping(self) -> None:
-        """Самый лёгкий запрос, требующий авторизации: проверка ключа и IP."""
+        """The cheapest authorized request: checks the key and the IP."""
         await self._request("GET", "/locations?limit=1")
 
     async def get_clan(self, tag: str) -> Clan:
@@ -153,12 +153,12 @@ class CocClient:
         return Player.from_api(await self._get(f"/players/{encode_tag(tag)}", ttl=300))
 
     async def get_current_war(self, clan_tag: str) -> War:
-        """Обычная война. В API наш клан всегда в поле `clan`."""
+        """Regular war. The API always puts our clan in `clan`."""
         data = await self._get(f"/clans/{encode_tag(clan_tag)}/currentwar")
         return War.from_api(data)
 
     async def get_league_group(self, clan_tag: str) -> CwlGroup | None:
-        """Группа ЛВК или None, если клан сейчас в ЛВК не участвует."""
+        """The CWL group, or None if the clan isn't in CWL right now."""
         try:
             data = await self._get(f"/clans/{encode_tag(clan_tag)}/currentwar/leaguegroup")
         except NotFound:
@@ -175,9 +175,9 @@ class CocClient:
         return war
 
     async def verify_player_token(self, player_tag: str, token: str) -> bool:
-        """Проверка владения аккаунтом: токен игрок берёт в настройках игры.
+        """Account ownership check: players get the token from the game settings.
 
-        Токен одноразовый и живёт несколько минут, поэтому не кэшируем.
+        Tokens are single-use and expire in minutes, so this is never cached.
         """
         data = await self._request(
             "POST", f"/players/{encode_tag(player_tag)}/verifytoken", json={"token": token}

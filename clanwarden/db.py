@@ -1,9 +1,9 @@
-"""Хранилище на SQLite.
+"""SQLite storage.
 
-SQLite выбран осознанно: бот ставится одним контейнером на маленький VPS,
-нагрузка — десятки записей в минуту. Отдельный Postgres тут только усложнил
-бы установку. Схема версионируется через PRAGMA user_version: каждая
-миграция — это шаг, который выполняется один раз.
+SQLite is a deliberate choice: the bot runs as a single container on a small
+VPS and writes a few dozen rows per minute. A separate Postgres would only
+make installation harder. The schema is versioned with ``PRAGMA user_version``:
+each migration is a step that runs exactly once.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from pathlib import Path
 import aiosqlite
 
 MIGRATIONS: list[str] = [
-    # 1: базовая схема
+    # 1: base schema
     """
     CREATE TABLE chats (
         chat_id         INTEGER PRIMARY KEY,
@@ -32,8 +32,8 @@ MIGRATIONS: list[str] = [
     );
     CREATE INDEX idx_chats_clan ON chats (clan_tag);
 
-    -- Тег принадлежит одному человеку: иначе напоминания и упоминания
-    -- уходили бы не тому. Передать тег другому можно только через проверку токеном.
+    -- A player tag has exactly one owner, otherwise mentions and reminders
+    -- would go to the wrong person. Taking over a tag requires a game token.
     CREATE TABLE links (
         player_tag   TEXT PRIMARY KEY,
         telegram_id  INTEGER NOT NULL,
@@ -49,8 +49,8 @@ MIGRATIONS: list[str] = [
         started_bot  INTEGER NOT NULL DEFAULT 0
     );
 
-    -- Журнал отправленных уведомлений. Благодаря нему перезапуск бота
-    -- не приводит к повторной рассылке «война началась».
+    -- Journal of delivered notifications. Thanks to it a restart never
+    -- re-sends "the war has started".
     CREATE TABLE sent_events (
         target_id  INTEGER NOT NULL,
         war_key    TEXT NOT NULL,
@@ -58,6 +58,11 @@ MIGRATIONS: list[str] = [
         sent_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (target_id, war_key, event)
     );
+    """,
+    # 2: interface language for groups and users (NULL = auto / default)
+    """
+    ALTER TABLE chats ADD COLUMN language TEXT;
+    ALTER TABLE users ADD COLUMN language TEXT;
     """,
 ]
 
@@ -77,6 +82,7 @@ class ChatSettings:
     mention_players: bool
     autodelete_min: int
     rules: str | None
+    language: str | None
 
     @classmethod
     def from_row(cls, row: aiosqlite.Row) -> ChatSettings:
@@ -92,6 +98,7 @@ class ChatSettings:
             mention_players=bool(row["mention_players"]),
             autodelete_min=row["autodelete_min"],
             rules=row["rules"],
+            language=row["language"],
         )
 
 
@@ -125,7 +132,7 @@ class Database:
     @property
     def conn(self) -> aiosqlite.Connection:
         if not self._conn:
-            raise RuntimeError("Database.connect() не был вызван")
+            raise RuntimeError("Database.connect() has not been called")
         return self._conn
 
     async def _migrate(self) -> None:
@@ -136,7 +143,7 @@ class Database:
             await self.conn.execute(f"PRAGMA user_version = {number}")
         await self.conn.commit()
 
-    # --- чаты ---
+    # --- chats ---
 
     async def get_chat(self, chat_id: int) -> ChatSettings | None:
         async with self.conn.execute("SELECT * FROM chats WHERE chat_id = ?", (chat_id,)) as cur:
@@ -150,35 +157,35 @@ class Database:
         assert chat is not None
         return chat
 
-    async def set_chat_clan(self, chat_id: int, clan_tag: str | None) -> None:
+    async def _update_chat(self, chat_id: int, column: str, value: object) -> None:
+        # `column` only ever comes from the hard-coded callers below, never from user input.
         await self.ensure_chat(chat_id)
-        await self.conn.execute("UPDATE chats SET clan_tag = ? WHERE chat_id = ?", (clan_tag, chat_id))
+        await self.conn.execute(f"UPDATE chats SET {column} = ? WHERE chat_id = ?", (value, chat_id))
         await self.conn.commit()
+
+    async def set_chat_clan(self, chat_id: int, clan_tag: str | None) -> None:
+        await self._update_chat(chat_id, "clan_tag", clan_tag)
 
     async def set_chat_thread(self, chat_id: int, thread_id: int | None) -> None:
-        await self.ensure_chat(chat_id)
-        await self.conn.execute("UPDATE chats SET thread_id = ? WHERE chat_id = ?", (thread_id, chat_id))
-        await self.conn.commit()
+        await self._update_chat(chat_id, "thread_id", thread_id)
 
     async def set_chat_rules(self, chat_id: int, rules: str | None) -> None:
-        await self.ensure_chat(chat_id)
-        await self.conn.execute("UPDATE chats SET rules = ? WHERE chat_id = ?", (rules, chat_id))
-        await self.conn.commit()
+        await self._update_chat(chat_id, "rules", rules)
+
+    async def set_chat_language(self, chat_id: int, language: str | None) -> None:
+        await self._update_chat(chat_id, "language", language)
 
     async def toggle_chat_flag(self, chat_id: int, flag: str) -> None:
         if flag not in CHAT_TOGGLES:
-            raise ValueError(f"Неизвестная настройка: {flag}")
+            raise ValueError(f"Unknown setting: {flag}")
         await self.ensure_chat(chat_id)
-        # Имя колонки берётся только из белого списка выше — подстановка безопасна.
         await self.conn.execute(f"UPDATE chats SET {flag} = 1 - {flag} WHERE chat_id = ?", (chat_id,))
         await self.conn.commit()
 
     async def set_chat_number(self, chat_id: int, field: str, value: int) -> None:
         if field not in ("remind_hours", "autodelete_min"):
-            raise ValueError(f"Неизвестная настройка: {field}")
-        await self.ensure_chat(chat_id)
-        await self.conn.execute(f"UPDATE chats SET {field} = ? WHERE chat_id = ?", (value, chat_id))
-        await self.conn.commit()
+            raise ValueError(f"Unknown setting: {field}")
+        await self._update_chat(chat_id, field, value)
 
     async def delete_chat(self, chat_id: int) -> None:
         await self.conn.execute("DELETE FROM chats WHERE chat_id = ?", (chat_id,))
@@ -192,7 +199,7 @@ class Database:
         async with self.conn.execute("SELECT DISTINCT clan_tag FROM chats WHERE clan_tag IS NOT NULL") as cur:
             return [r[0] for r in await cur.fetchall()]
 
-    # --- привязки аккаунтов ---
+    # --- account links ---
 
     async def get_link(self, player_tag: str) -> Link | None:
         async with self.conn.execute("SELECT * FROM links WHERE player_tag = ?", (player_tag,)) as cur:
@@ -235,17 +242,40 @@ class Database:
         ) as cur:
             return {r["player_tag"]: _link(r) for r in await cur.fetchall()}
 
-    # --- пользователи ---
+    # --- users ---
 
-    async def mark_user_started(self, telegram_id: int) -> None:
+    async def mark_user_started(self, telegram_id: int, language: str | None = None) -> None:
+        """The user pressed /start in private chat, so the bot may message them first.
+
+        Their Telegram language is remembered unless they picked one explicitly.
+        """
         await self.conn.execute(
             """
-            INSERT INTO users (telegram_id, started_bot) VALUES (?, 1)
-            ON CONFLICT (telegram_id) DO UPDATE SET started_bot = 1
+            INSERT INTO users (telegram_id, started_bot, language) VALUES (?, 1, ?)
+            ON CONFLICT (telegram_id) DO UPDATE SET
+                started_bot = 1,
+                language = COALESCE(users.language, excluded.language)
             """,
-            (telegram_id,),
+            (telegram_id, language),
         )
         await self.conn.commit()
+
+    async def set_user_language(self, telegram_id: int, language: str) -> None:
+        await self.conn.execute(
+            """
+            INSERT INTO users (telegram_id, language) VALUES (?, ?)
+            ON CONFLICT (telegram_id) DO UPDATE SET language = excluded.language
+            """,
+            (telegram_id, language),
+        )
+        await self.conn.commit()
+
+    async def user_language(self, telegram_id: int) -> str | None:
+        async with self.conn.execute(
+            "SELECT language FROM users WHERE telegram_id = ?", (telegram_id,)
+        ) as cur:
+            row = await cur.fetchone()
+        return row[0] if row else None
 
     async def toggle_dm_reminders(self, telegram_id: int) -> bool:
         await self.conn.execute("INSERT OR IGNORE INTO users (telegram_id) VALUES (?)", (telegram_id,))
@@ -255,6 +285,10 @@ class Database:
         await self.conn.commit()
         return await self.dm_reminders_enabled(telegram_id)
 
+    async def disable_dm_reminders(self, telegram_id: int) -> None:
+        await self.conn.execute("UPDATE users SET dm_reminders = 0 WHERE telegram_id = ?", (telegram_id,))
+        await self.conn.commit()
+
     async def dm_reminders_enabled(self, telegram_id: int) -> bool:
         async with self.conn.execute(
             "SELECT dm_reminders FROM users WHERE telegram_id = ?", (telegram_id,)
@@ -262,19 +296,19 @@ class Database:
             row = await cur.fetchone()
         return bool(row[0]) if row else True
 
-    async def dm_recipients(self, telegram_ids: list[int]) -> set[int]:
-        """Кому можно писать в личку: человек нажал /start и не выключил напоминания."""
+    async def dm_recipients(self, telegram_ids: list[int]) -> dict[int, str | None]:
+        """Who can be messaged privately (pressed /start, reminders on) → their language."""
         if not telegram_ids:
-            return set()
+            return {}
         placeholders = ",".join("?" * len(telegram_ids))
         async with self.conn.execute(
-            f"""SELECT telegram_id FROM users
+            f"""SELECT telegram_id, language FROM users
                 WHERE started_bot = 1 AND dm_reminders = 1 AND telegram_id IN ({placeholders})""",
             telegram_ids,
         ) as cur:
-            return {r[0] for r in await cur.fetchall()}
+            return {r[0]: r[1] for r in await cur.fetchall()}
 
-    # --- журнал уведомлений ---
+    # --- notification journal ---
 
     async def sent_events(self, target_id: int, war_key: str) -> set[str]:
         async with self.conn.execute(

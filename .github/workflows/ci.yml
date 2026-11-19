@@ -31,7 +31,7 @@ jobs:
         run: pytest -q
 
   docker:
-    # Образ публикуется в GitHub Container Registry после зелёных тестов на main и тегах.
+    # The image is published to GitHub Container Registry after green tests on main and on tags.
     needs: test
     if: github.event_name == 'push'
     runs-on: ubuntu-latest

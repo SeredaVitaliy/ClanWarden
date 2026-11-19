@@ -1,7 +1,7 @@
-# секреты
+# secrets
 .env
 
-# данные бота (реальные Telegram ID игроков)
+# bot data (contains real Telegram user IDs)
 data/
 *.db
 *.db-journal
@@ -17,7 +17,7 @@ venv/
 .pytest_cache/
 .ruff_cache/
 
-# системное
+# OS / editors
 .DS_Store
 .idea/
 .vscode/

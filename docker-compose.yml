@@ -1,9 +1,9 @@
 services:
   bot:
-    image: ghcr.io/seredavitaliy/coc-war-bot:latest
-    # Чтобы собрать образ из исходников вместо готового: docker compose up -d --build
+    image: ghcr.io/seredavitaliy/clan-warden:latest
+    # To build from source instead of pulling the image: docker compose up -d --build
     build: .
-    container_name: coc-war-bot
+    container_name: clan-warden
     restart: unless-stopped
     env_file: .env
     volumes:

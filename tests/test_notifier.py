@@ -1,13 +1,13 @@
-"""Сквозной тест цикла уведомлений: база настоящая, Telegram и API — заглушки."""
+"""End-to-end test of the notification loop: real database, stubbed Telegram and API."""
 
 from datetime import timedelta
 from types import SimpleNamespace
 
 import pytest
 
-from cocbot.coc.models import War
-from cocbot.db import Database
-from cocbot.services.notifier import Notifier
+from clanwarden.coc.models import War
+from clanwarden.db import Database
+from clanwarden.services.notifier import Notifier
 from tests.factories import NOW, war_json
 
 
@@ -51,11 +51,11 @@ async def test_reminder_is_sent_once_with_mentions_and_dm(db):
     await notifier.tick(now=NOW)
     group_msgs = [m for m in bot.sent if m[0] == -100]
     dm_msgs = [m for m in bot.sent if m[0] == 42]
-    assert len(group_msgs) == 1 and group_msgs[0][2] == 7  # в нужную тему
+    assert len(group_msgs) == 1 and group_msgs[0][2] == 7  # into the right topic
     assert "tg://user?id=42" in group_msgs[0][1]
     assert len(dm_msgs) == 1 and "Bob" in dm_msgs[0][1]
 
-    # Повторный опрос (или перезапуск бота) ничего не дублирует.
+    # Another poll (or a bot restart) duplicates nothing.
     await notifier.tick(now=NOW + timedelta(minutes=2))
     assert len(bot.sent) == 2
 

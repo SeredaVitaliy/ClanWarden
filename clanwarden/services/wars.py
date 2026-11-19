@@ -1,12 +1,12 @@
-"""Бизнес-логика вокруг войн: обычная война, ЛВК, таблица группы.
+"""War domain logic: regular wars, Clan War League, group standings.
 
-Главная сложность здесь — ЛВК. API отдаёт группу из 8 кланов и по 4 войны
-на раунд, и сам не говорит, какая из них наша. Поэтому:
-1. берём группу (/leaguegroup);
-2. идём по раундам с конца и ищем войну, где участвует наш клан;
-3. разворачиваем её так, чтобы наш клан был в `clan`.
-Найденный warTag запоминаем: состав раунда после жеребьёвки не меняется,
-и при следующем опросе хватает одного запроса вместо четырёх.
+The tricky part is CWL. The API returns a group of 8 clans with 4 wars per
+round and doesn't say which one is ours. So we:
+1. fetch the group (/leaguegroup);
+2. walk the rounds from the latest and find the war our clan is in;
+3. orient it so that our clan is in `clan`.
+The found warTag is cached: a round's pairings never change after the draw,
+so the next poll needs one request instead of four.
 """
 
 from __future__ import annotations
@@ -15,8 +15,8 @@ import asyncio
 import logging
 from dataclasses import dataclass
 
-from cocbot.coc.client import CocClient, NotFound
-from cocbot.coc.models import CwlGroup, CwlStanding, War, WarResult, WarState
+from clanwarden.coc.client import CocClient, NotFound
+from clanwarden.coc.models import CwlGroup, CwlStanding, War, WarResult, WarState
 
 log = logging.getLogger(__name__)
 
@@ -26,14 +26,14 @@ CWL_WIN_BONUS_STARS = 10
 @dataclass(frozen=True)
 class CwlRound:
     group: CwlGroup
-    round_number: int  # с 1
-    war: War  # развёрнута к нашему клану
+    round_number: int  # 1-based
+    war: War  # oriented towards our clan
 
 
 class WarService:
     def __init__(self, client: CocClient) -> None:
         self.client = client
-        # (clan_tag, season, round_index) -> warTag нашей войны
+        # (clan_tag, season, round_index) -> warTag of our war
         self._our_war_tags: dict[tuple[str, str, int], str] = {}
 
     async def regular_war(self, clan_tag: str) -> War | None:
@@ -57,9 +57,9 @@ class WarService:
         return None
 
     async def cwl_rounds(self, clan_tag: str) -> tuple[CwlGroup, list[CwlRound]] | None:
-        """Текущие раунды ЛВК нашего клана: идущий бой и/или подготовка следующего.
+        """Current CWL rounds of our clan: the battle in progress and/or the next preparation.
 
-        Возвращает до двух раундов, самый свежий последним.
+        Returns up to two rounds, the latest last.
         """
         group = await self.client.get_league_group(clan_tag)
         if not group or not group.is_active:
@@ -73,13 +73,13 @@ class WarService:
             if not war:
                 continue
             found.append(CwlRound(group=group, round_number=index + 1, war=war))
-            # Ниже по раундам только завершённые войны — дальше не ищем.
+            # Earlier rounds only contain finished wars — stop here.
             if war.state in (WarState.IN_WAR, WarState.ENDED):
                 break
         return group, list(reversed(found))
 
     async def current_cwl(self, clan_tag: str) -> CwlRound | None:
-        """Раунд ЛВК, который сейчас важнее всего показать: идущий бой, иначе подготовка."""
+        """The CWL round most worth showing now: the battle in progress, otherwise preparation."""
         result = await self.cwl_rounds(clan_tag)
         if not result:
             return None
@@ -91,30 +91,30 @@ class WarService:
         return None
 
     async def active_wars(self, clan_tag: str) -> list[War]:
-        """Все войны клана, по которым имеет смысл слать уведомления.
+        """All of the clan's wars that may need notifications.
 
-        Во время ЛВК обычной войны нет, но спрашиваем оба источника:
-        так не нужно гадать, какой сейчас период.
+        There's no regular war during CWL, but we ask both sources anyway —
+        that way we never have to guess which period it is.
         """
         wars: list[War] = []
         regular, cwl = await asyncio.gather(
             self.regular_war(clan_tag), self.cwl_rounds(clan_tag), return_exceptions=True
         )
         if isinstance(regular, BaseException):
-            log.warning("Обычная война %s: %s", clan_tag, regular)
+            log.warning("Regular war %s: %s", clan_tag, regular)
             if not isinstance(cwl, BaseException) and not cwl:
                 raise regular
         elif regular:
             wars.append(regular)
 
         if isinstance(cwl, BaseException):
-            log.warning("ЛВК %s: %s", clan_tag, cwl)
+            log.warning("CWL %s: %s", clan_tag, cwl)
         elif cwl:
             wars.extend(r.war for r in cwl[1])
         return wars
 
     async def war_for_display(self, clan_tag: str) -> War | None:
-        """Одна война для команды /war: ЛВК в приоритете, если она идёт."""
+        """A single war for /war: CWL takes priority while it's running."""
         cwl = await self.current_cwl(clan_tag)
         if cwl and cwl.war.state.is_active:
             return cwl.war
@@ -133,11 +133,11 @@ class WarService:
 
 
 def compute_standings(group: CwlGroup, wars: list[War]) -> list[CwlStanding]:
-    """Таблица группы ЛВК.
+    """CWL group standings.
 
-    Очки — сумма звёзд за все войны плюс 10 за каждую победу (как в игре).
-    Победа засчитывается только в завершённой войне. При равенстве звёзд
-    выше тот, у кого больше суммарное разрушение.
+    Score is the sum of stars over all wars plus 10 per war win (as in the game).
+    A win only counts once the war has ended. Ties on stars are broken by
+    total destruction.
     """
     table = {c.tag: CwlStanding(tag=c.tag, name=c.name) for c in group.clans}
 
