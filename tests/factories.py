@@ -1,4 +1,4 @@
-"""Сборщики JSON в формате Clash of Clans API для тестов."""
+"""Builders for Clash of Clans API-shaped JSON used in tests."""
 
 from __future__ import annotations
 
@@ -59,9 +59,9 @@ def war_json(
         "preparationStartTime": api_time(prep),
         "startTime": api_time(start),
         "endTime": api_time(end),
-        "clan": ours or clan("#OURS", "Наши", [member("#P1", "Alice", 1, 2), member("#P2", "Bob", 2, 0)]),
+        "clan": ours or clan("#OURS", "Our Clan", [member("#P1", "Alice", 1, 2), member("#P2", "Bob", 2, 0)]),
         "opponent": theirs
-        or clan("#THEM", "Враги", [member("#E1", "Eve", 1, 1), member("#E2", "Mallory", 2, 0)]),
+        or clan("#THEM", "Rivals", [member("#E1", "Eve", 1, 1), member("#E2", "Mallory", 2, 0)]),
     }
     if attacks_per_member is not None:
         data["attacksPerMember"] = attacks_per_member

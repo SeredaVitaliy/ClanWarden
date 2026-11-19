@@ -1,10 +1,11 @@
 [project]
-name = "coc-war-bot"
+name = "clan-warden"
 version = "1.0.0"
-description = "Self-hosted Telegram-бот для кланов Clash of Clans: войны, ЛВК, напоминания об атаках"
+description = "Self-hosted Clash of Clans Telegram bot: clan war & CWL tracking, attack reminders with mentions"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
+keywords = ["clash-of-clans", "telegram-bot", "aiogram", "clan-war", "cwl"]
 dependencies = [
     "aiogram>=3.13,<4",
     "aiohttp>=3.9",
@@ -16,14 +17,14 @@ dependencies = [
 dev = ["pytest>=8", "pytest-asyncio>=0.24", "ruff>=0.6"]
 
 [project.scripts]
-cocbot = "cocbot.__main__:main"
+clan-warden = "clanwarden.__main__:main"
 
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["cocbot*"]
+include = ["clanwarden*"]
 
 [tool.ruff]
 line-length = 110
@@ -33,9 +34,8 @@ target-version = "py311"
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "ASYNC"]
 
 [tool.ruff.lint.per-file-ignores]
-# Тексты сообщений — длинные строки читаются лучше, чем порезанные.
-"cocbot/texts.py" = ["E501"]
-"cocbot/bot/keyboards.py" = ["E501"]
+# Message catalogs: long strings read better than wrapped ones.
+"clanwarden/i18n/*.py" = ["E501"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

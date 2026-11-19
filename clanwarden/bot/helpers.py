@@ -1,4 +1,4 @@
-"""Общие помощники для хендлеров."""
+"""Shared helpers for handlers."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from aiogram.enums import ChatType
 from aiogram.exceptions import TelegramAPIError
 from aiogram.types import Message, User
 
-from cocbot.coc.client import (
+from clanwarden.coc.client import (
     AccessDenied,
     CocApiError,
     CocClient,
@@ -20,43 +20,45 @@ from cocbot.coc.client import (
     NotFound,
     RateLimited,
 )
-from cocbot.coc.tags import normalize_tag
-from cocbot.db import ChatSettings, Database
+from clanwarden.coc.tags import normalize_tag
+from clanwarden.db import ChatSettings, Database
 
 log = logging.getLogger(__name__)
 
 
 class UserFacingError(Exception):
-    """Ошибка, текст которой можно показать пользователю как есть."""
+    """An error whose message can be shown to the user. Carries an i18n key."""
+
+    def __init__(self, key: str) -> None:
+        super().__init__(key)
+        self.key = key
 
 
 def is_group(message: Message) -> bool:
     return message.chat.type in (ChatType.GROUP, ChatType.SUPERGROUP)
 
 
-def api_error_text(exc: CocApiError) -> str:
+def api_error_key(exc: CocApiError) -> str:
+    """Map an API error to a message the user can act on."""
     if isinstance(exc, InvalidIp):
-        log.error("CoC API отклонил IP сервера: %s", exc.message)
-        return "⚠️ Бот не может обратиться к API игры: ключ не подходит к IP сервера. Сообщите владельцу бота."
+        log.error("The CoC API rejected this server's IP: %s", exc.message)
+        return "err_invalid_ip"
     if isinstance(exc, AccessDenied):
-        return (
-            "🔒 Журнал войн клана закрыт. Глава или соруководитель может открыть его: "
-            "клан → Настройки → «Журнал войн: открыт»."
-        )
+        return "err_private_log"
     if isinstance(exc, NotFound):
-        return "🤷 Клан или игрок не найден. Проверьте тег."
+        return "err_not_found"
     if isinstance(exc, Maintenance):
-        return "🛠 Clash of Clans сейчас на техобслуживании. Попробуйте позже."
+        return "err_maintenance"
     if isinstance(exc, RateLimited):
-        return "🐢 Слишком много запросов к API игры. Попробуйте через минуту."
-    log.warning("Ошибка CoC API: %s", exc)
-    return "😵 API игры сейчас не отвечает. Попробуйте позже."
+        return "err_rate_limited"
+    log.warning("CoC API error: %s", exc)
+    return "err_api"
 
 
 async def is_admin(bot: Bot, message_or_chat_id: Message | int, user: User | None) -> bool:
     if isinstance(message_or_chat_id, Message):
         message = message_or_chat_id
-        # Анонимный админ пишет от имени самой группы.
+        # An anonymous admin posts on behalf of the group itself.
         if message.sender_chat and message.sender_chat.id == message.chat.id:
             return True
         chat_id = message.chat.id
@@ -79,20 +81,20 @@ async def resolve_clan(
     db: Database,
     client: CocClient,
 ) -> str:
-    """Какой клан имеет в виду пользователь.
+    """Figure out which clan the user means.
 
-    Порядок: тег из аргумента команды → клан группы → клан первого
-    привязанного аккаунта (для личных сообщений).
+    Order: tag passed as an argument → the group's clan → the clan of the
+    user's first linked account (for private chats).
     """
     if arg:
         tag = normalize_tag(arg.split()[0])
         if not tag:
-            raise UserFacingError("Некорректный тег клана. Пример: <code>/war #2PP</code>")
+            raise UserFacingError("err_bad_clan_tag")
         return tag
     if chat and chat.clan_tag:
         return chat.clan_tag
     if chat is not None:
-        raise UserFacingError("К этой группе ещё не привязан клан. Админ может сделать это: /setclan #ТЕГ")
+        raise UserFacingError("err_no_clan")
 
     if user_id:
         for link in await db.user_links(user_id):
@@ -102,17 +104,14 @@ async def resolve_clan(
                 continue
             if player.clan:
                 return player.clan.tag
-    raise UserFacingError(
-        "Не понимаю, про какой клан речь. Привяжите аккаунт (/link #ТЕГ) "
-        "или укажите тег клана: <code>/war #ТЕГ</code>"
-    )
+    raise UserFacingError("err_which_clan")
 
 
 def schedule_delete(bot: Bot, chat_id: int, message_ids: list[int], minutes: int) -> None:
-    """Удалить сообщения через N минут, чтобы не засорять чат клана.
+    """Delete messages after N minutes to keep the clan chat clean.
 
-    Таймеры живут в памяти: после перезапуска бота уже запланированные
-    удаления пропадут. Для MVP это осознанный компромисс.
+    Timers live in memory: deletions scheduled before a restart are lost.
+    That's an accepted trade-off for an MVP.
     """
     if minutes <= 0 or not message_ids:
         return

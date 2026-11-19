@@ -1,7 +1,7 @@
 from datetime import timedelta
 
-from cocbot.coc.models import War
-from cocbot.services.notifications import Event, plan_events
+from clanwarden.coc.models import War
+from clanwarden.services.notifications import Event, plan_events
 from tests.factories import NOW, clan, member, war_json
 
 ALL = set(Event)
@@ -17,11 +17,11 @@ def test_preparation_event():
 
 
 def test_battle_start_only_soon_after_start():
-    # Война началась 30 минут назад: end = start + 24h.
+    # The war started 30 minutes ago: end = start + 24h.
     fresh = War.from_api(war_json(end_in=timedelta(hours=23, minutes=30)))
     assert Event.BATTLE_START in plan(fresh)
 
-    # Бота добавили через 10 часов после начала — «война началась» уже не нужно.
+    # Bot added 10 hours into the war — "the war has started" is no longer useful.
     old = War.from_api(war_json(end_in=timedelta(hours=14)))
     assert Event.BATTLE_START not in plan(old)
 
@@ -35,7 +35,7 @@ def test_reminder_window():
 
 
 def test_no_reminder_when_everyone_attacked():
-    done = clan("#OURS", "Наши", [member("#P1", "A", 1, 2), member("#P2", "B", 2, 2)])
+    done = clan("#OURS", "Our Clan", [member("#P1", "A", 1, 2), member("#P2", "B", 2, 2)])
     war = War.from_api(war_json(ours=done, end_in=timedelta(hours=1)))
     assert Event.REMINDER not in plan(war)
 

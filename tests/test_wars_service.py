@@ -1,13 +1,13 @@
 from datetime import timedelta
 
-from cocbot.coc.client import NotFound
-from cocbot.coc.models import CwlGroup, War, WarState
-from cocbot.services.wars import WarService, compute_standings
+from clanwarden.coc.client import NotFound
+from clanwarden.coc.models import CwlGroup, War, WarState
+from clanwarden.services.wars import WarService, compute_standings
 from tests.factories import clan, member, war_json
 
 
 class FakeClient:
-    """Подменяет CocClient: отдаёт заранее подготовленные ответы и считает запросы."""
+    """Stands in for CocClient: returns canned responses and counts requests."""
 
     def __init__(self, *, regular=None, group=None, cwl_wars=None):
         self.regular = regular or {"state": "notInWar"}
@@ -47,19 +47,19 @@ def make_group():
             {"warTags": ["#R1A", "#R1B"]},
             {"warTags": ["#R2A", "#R2B"]},
             {"warTags": ["#R3A", "#R3B"]},
-            {"warTags": ["#0", "#0"]},  # ещё не сформирован
+            {"warTags": ["#0", "#0"]},  # not drawn yet
         ],
     }
 
 
 CWL_WARS = {
-    # раунд 1 завершён: мы победили
+    # round 1 ended: we won
     "#R1A": cwl_war("warEnded", "#C2", "#C3", 5, 3),
     "#R1B": cwl_war("warEnded", "#C4", "#OURS", 2, 6),
-    # раунд 2 идёт: мы в поле opponent
+    # round 2 in progress: we are in the `opponent` field
     "#R2A": cwl_war("inWar", "#C2", "#OURS", 1, 2),
     "#R2B": cwl_war("inWar", "#C3", "#C4", 0, 0),
-    # раунд 3 — подготовка
+    # round 3: preparation
     "#R3A": cwl_war("preparation", "#OURS", "#C3"),
     "#R3B": cwl_war("preparation", "#C2", "#C4"),
 }
@@ -72,7 +72,7 @@ async def test_current_cwl_finds_our_war_and_orients_it():
     rnd = await service.current_cwl("#OURS")
     assert rnd.round_number == 2
     assert rnd.war.state is WarState.IN_WAR
-    assert rnd.war.clan.tag == "#OURS"  # развернули к нам
+    assert rnd.war.clan.tag == "#OURS"  # oriented towards us
     assert rnd.war.opponent.tag == "#C2"
 
 
@@ -85,7 +85,7 @@ async def test_cwl_rounds_returns_prep_and_battle_and_caches_war_tags():
 
     client.cwl_calls.clear()
     await service.cwl_rounds("#OURS")
-    # Во второй раз знаем наши warTag'и — по одному запросу на раунд.
+    # The second time our warTags are known — one request per round.
     assert sorted(client.cwl_calls) == ["#R2A", "#R3A"]
 
 
@@ -106,10 +106,10 @@ def test_standings_with_win_bonus():
     wars = [War.from_api(w, is_cwl=True, war_tag=t) for t, w in CWL_WARS.items()]
     table = {row.tag: row for row in compute_standings(group, wars)}
 
-    # Мы: 6 звёзд + 10 за победу в 1 раунде + 2 звезды в идущем 2 раунде.
+    # Us: 6 stars + 10 for the round 1 win + 2 stars in the ongoing round 2.
     assert table["#OURS"].stars == 18
     assert table["#OURS"].wins == 1
-    # C2: 5 + 10 (победа над C3) + 1.
+    # C2: 5 + 10 (beat C3) + 1.
     assert table["#C2"].stars == 16
     first = compute_standings(group, wars)[0]
     assert first.tag == "#OURS"

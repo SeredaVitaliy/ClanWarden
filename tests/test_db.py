@@ -1,6 +1,6 @@
 import pytest
 
-from cocbot.db import Database
+from clanwarden.db import Database
 
 
 @pytest.fixture
@@ -36,25 +36,25 @@ async def test_chat_settings_and_toggles(db):
 
 async def test_links_are_unique_per_tag(db):
     await db.save_link("#P1", 1, "Alice", verified=False)
-    await db.save_link("#P1", 2, "Alice", verified=True)  # перепривязка с подтверждением
+    await db.save_link("#P1", 2, "Alice", verified=True)  # re-link with verification
 
     link = await db.get_link("#P1")
     assert (link.telegram_id, link.verified) == (2, True)
     assert await db.user_links(1) == []
-    assert not await db.delete_link("#P1", 1)  # чужую привязку удалить нельзя
+    assert not await db.delete_link("#P1", 1)  # can't delete someone else's link
     assert await db.delete_link("#P1", 2)
 
 
 async def test_dm_recipients_require_start(db):
-    await db.toggle_dm_reminders(1)  # выключил
+    await db.toggle_dm_reminders(1)  # turned off
     await db.mark_user_started(2)
     await db.mark_user_started(3)
-    await db.toggle_dm_reminders(3)  # выключил
-    assert await db.dm_recipients([1, 2, 3, 4]) == {2}
+    await db.toggle_dm_reminders(3)  # turned off
+    assert await db.dm_recipients([1, 2, 3, 4]) == {2: None}
 
 
 async def test_sent_events_journal(db):
     await db.mark_sent(-100, "war:1", "start")
-    await db.mark_sent(-100, "war:1", "start")  # повтор не падает
+    await db.mark_sent(-100, "war:1", "start")  # a duplicate is fine
     assert await db.sent_events(-100, "war:1") == {"start"}
     assert await db.sent_events(-100, "war:2") == set()

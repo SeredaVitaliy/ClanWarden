@@ -1,8 +1,8 @@
-"""Модели данных Clash of Clans API.
+"""Clash of Clans API data models.
 
-Сырые JSON-ответы превращаем в dataclass'ы на входе в систему. Остальной код
-работает с типизированными объектами и не гадает, есть ли в словаре ключ
-"attacks" и список ли это.
+Raw JSON responses are turned into dataclasses at the boundary. The rest of
+the code works with typed objects and never has to guess whether a dict has
+an "attacks" key and whether it's a list.
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ class WarResult(StrEnum):
 
 
 def parse_time(raw: str | None) -> datetime | None:
-    """'20240131T120000.000Z' -> datetime в UTC."""
+    """'20240131T120000.000Z' -> datetime in UTC."""
     if not raw:
         return None
     try:
@@ -129,7 +129,7 @@ class War:
 
     @classmethod
     def from_api(cls, data: dict, *, is_cwl: bool = False, war_tag: str | None = None) -> War:
-        # В ЛВК у каждого игрока одна атака, и API не всегда присылает поле.
+        # In CWL every player has one attack, and the API doesn't always send the field.
         default_attacks = 1 if is_cwl else 2
         return cls(
             state=WarState.parse(data.get("state")),
@@ -144,15 +144,15 @@ class War:
             war_tag=war_tag,
         )
 
-    # --- производные значения ---
+    # --- derived values ---
 
     @property
     def key(self) -> str:
-        """Стабильный идентификатор войны — по нему помним отправленные уведомления.
+        """A stable war identifier — the notification journal is keyed by it.
 
-        Порядок кланов сортируем, чтобы ключ не зависел от того, с чьей стороны
-        мы смотрим на войну. Время начала подготовки отличает две войны с одним
-        и тем же соперником.
+        Clan tags are sorted so the key doesn't depend on which side we look
+        from. The preparation start time tells apart two wars against the same
+        opponent.
         """
         if self.war_tag:
             return f"cwl:{self.war_tag}"
@@ -168,10 +168,9 @@ class War:
         return clan_tag in (self.clan.tag, self.opponent.tag)
 
     def oriented(self, our_tag: str) -> War:
-        """Возвращает войну, где `clan` — это наш клан.
+        """Return the war with our clan in `clan`.
 
-        В ЛВК API отдаёт войну без привязки к стороне: наш клан может оказаться
-        и в `clan`, и в `opponent`.
+        CWL wars aren't tied to a side: our clan may be in `clan` or in `opponent`.
         """
         if self.opponent.tag == our_tag:
             return replace(self, clan=self.opponent, opponent=self.clan)
@@ -188,7 +187,7 @@ class War:
 
     @property
     def result(self) -> WarResult:
-        """Итог с точки зрения нашего клана: больше звёзд, при равенстве — процент."""
+        """Result for our clan: more stars wins; on equal stars, higher destruction."""
         ours = (self.clan.stars, self.clan.destruction)
         theirs = (self.opponent.stars, self.opponent.destruction)
         if ours > theirs:
@@ -210,7 +209,7 @@ class CwlGroup:
     state: str  # preparation / inWar / ended
     season: str
     clans: tuple[CwlClan, ...]
-    rounds: tuple[tuple[str, ...], ...]  # warTags по раундам, "#0" — раунд ещё не сформирован
+    rounds: tuple[tuple[str, ...], ...]  # warTags per round; "#0" means the round isn't drawn yet
 
     @classmethod
     def from_api(cls, data: dict) -> CwlGroup:

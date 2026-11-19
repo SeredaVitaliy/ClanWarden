@@ -1,7 +1,7 @@
-"""Точка входа.
+"""Entry point.
 
-python -m cocbot          — запустить бота
-python -m cocbot check    — проверить токены и доступ к API (удобно после установки)
+python -m clanwarden          — run the bot
+python -m clanwarden check    — verify tokens and API access (handy right after installing)
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ import contextlib
 import logging
 import sys
 
-from cocbot.config import ConfigError, load_settings
+from clanwarden.config import ConfigError, Settings, load_settings
 
 
 def _setup_logging(level: str) -> None:
@@ -21,20 +21,20 @@ def _setup_logging(level: str) -> None:
         format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
-    # aiogram логирует каждый апдейт на INFO — это шумно для продакшена.
+    # aiogram logs every update at INFO, which is too noisy for production.
     logging.getLogger("aiogram.event").setLevel(logging.WARNING)
 
 
-async def _check(settings) -> int:
+async def _check(settings: Settings) -> int:
     from aiogram import Bot
 
-    from cocbot.coc.client import CocApiError, CocClient, InvalidIp
+    from clanwarden.coc.client import CocApiError, CocClient, InvalidIp
 
     ok = True
     bot = Bot(settings.telegram_token)
     try:
         me = await bot.get_me()
-        print(f"✅ Telegram: бот @{me.username}")
+        print(f"✅ Telegram: bot @{me.username}")
     except Exception as exc:
         print(f"❌ Telegram: {exc}")
         ok = False
@@ -44,14 +44,14 @@ async def _check(settings) -> int:
     async with CocClient(settings.coc_token, settings.coc_base_url) as coc:
         try:
             await coc.ping()
-            print("✅ Clash of Clans API: ключ работает")
+            print("✅ Clash of Clans API: key works")
             if settings.bootstrap_clan_tag:
                 clan = await coc.get_clan(settings.bootstrap_clan_tag)
-                log_state = "открыт" if clan.war_log_public else "ЗАКРЫТ — бот не увидит войны"
-                print(f"✅ Клан {clan.name} {clan.tag}: журнал войн {log_state}")
+                war_log = "public" if clan.war_log_public else "PRIVATE — the bot won't see wars"
+                print(f"✅ Clan {clan.name} {clan.tag}: war log is {war_log}")
         except InvalidIp as exc:
-            print(f"❌ Clash of Clans API: ключ не разрешён для IP этого сервера.\n   {exc.message}")
-            print("   Создайте ключ на https://developer.clashofclans.com с IP из сообщения выше.")
+            print(f"❌ Clash of Clans API: the key doesn't allow this server's IP.\n   {exc.message}")
+            print("   Create a key at https://developer.clashofclans.com with the IP shown above.")
             ok = False
         except CocApiError as exc:
             print(f"❌ Clash of Clans API: {exc}")
@@ -60,14 +60,16 @@ async def _check(settings) -> int:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(prog="cocbot", description="CoC War Bot")
+    parser = argparse.ArgumentParser(
+        prog="clanwarden", description="Clan Warden — Clash of Clans Telegram bot"
+    )
     parser.add_argument("command", nargs="?", default="run", choices=["run", "check"])
     args = parser.parse_args()
 
     try:
         settings = load_settings()
     except ConfigError as exc:
-        print(f"Ошибка конфигурации: {exc}", file=sys.stderr)
+        print(f"Configuration error: {exc}", file=sys.stderr)
         sys.exit(2)
 
     _setup_logging(settings.log_level)
@@ -75,7 +77,7 @@ def main() -> None:
     if args.command == "check":
         sys.exit(asyncio.run(_check(settings)))
 
-    from cocbot.app import run
+    from clanwarden.app import run
 
     with contextlib.suppress(KeyboardInterrupt):
         asyncio.run(run(settings))

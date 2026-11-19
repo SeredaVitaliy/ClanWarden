@@ -2,8 +2,8 @@ from datetime import timedelta
 
 import pytest
 
-from cocbot.coc.models import War, WarResult, WarState, parse_time
-from cocbot.coc.tags import encode_tag, normalize_tag
+from clanwarden.coc.models import War, WarResult, WarState, parse_time
+from clanwarden.coc.tags import encode_tag, normalize_tag
 from tests.factories import clan, member, war_json
 
 
@@ -13,11 +13,11 @@ from tests.factories import clan, member, war_json
         ("#2PP", "#2PP"),
         ("2pp", "#2PP"),
         ("  #2pp  ", "#2PP"),
-        ("#2PO", "#2P0"),  # буква O -> ноль
-        ("#ABC", None),  # A и B не входят в алфавит тегов
+        ("#2PO", "#2P0"),  # letter O -> zero
+        ("#ABC", None),  # A and B are not in the tag alphabet
         ("", None),
         (None, None),
-        ("#2", None),  # слишком короткий
+        ("#2", None),  # too short
     ],
 )
 def test_normalize_tag(raw, expected):
@@ -73,7 +73,7 @@ def test_key_differs_between_wars_with_same_opponent():
     [
         ((10, 80.0), (9, 99.0), WarResult.WIN),
         ((9, 99.0), (10, 50.0), WarResult.LOSE),
-        ((10, 90.0), (10, 85.0), WarResult.WIN),  # при равенстве звёзд решает процент
+        ((10, 90.0), (10, 85.0), WarResult.WIN),  # equal stars: destruction decides
         ((10, 90.0), (10, 90.0), WarResult.TIE),
     ],
 )

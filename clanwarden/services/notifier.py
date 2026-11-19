@@ -1,13 +1,13 @@
-"""Фоновый опрос API и рассылка уведомлений.
+"""Background polling and notification delivery.
 
-Раз в POLL_INTERVAL_SECONDS:
-1. берём все группы с привязанным кланом и группируем по тегу клана —
-   если один клан подключён в двух группах, в API ходим один раз;
-2. для каждой войны клана решаем (plan_events), что пора отправить;
-3. отправляем и записываем в журнал sent_events.
+Every POLL_INTERVAL_SECONDS:
+1. load all groups that have a clan and group them by clan tag — if one clan
+   is connected to two groups, the API is called only once;
+2. for each of the clan's wars decide (``plan_events``) what is due;
+3. send it and record it in the ``sent_events`` journal.
 
-Запись в журнал идёт после успешной отправки. Если Telegram недоступен,
-событие попробуем отправить на следующем опросе, а не потеряем.
+The journal is written *after* a successful send. If Telegram is unreachable,
+the event will be retried on the next poll instead of being lost.
 """
 
 from __future__ import annotations
@@ -18,42 +18,38 @@ from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 
 from aiogram import Bot
-from aiogram.exceptions import (
-    TelegramBadRequest,
-    TelegramForbiddenError,
-    TelegramRetryAfter,
-)
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError, TelegramRetryAfter
 
-from cocbot import texts
-from cocbot.coc.client import CocApiError, InvalidIp, Maintenance
-from cocbot.coc.models import War, WarState
-from cocbot.db import ChatSettings, Database, Link
-from cocbot.services.notifications import Event, dm_event_key, enabled_events, plan_events
-from cocbot.services.wars import WarService
+from clanwarden import texts
+from clanwarden.coc.client import CocApiError, InvalidIp, Maintenance
+from clanwarden.coc.models import War, WarState
+from clanwarden.db import ChatSettings, Database, Link
+from clanwarden.i18n import Translator
+from clanwarden.services.notifications import Event, dm_event_key, enabled_events, plan_events
+from clanwarden.services.wars import WarService
 
 log = logging.getLogger(__name__)
 
 
 async def send_html(bot: Bot, chat_id: int, text: str, thread_id: int | None = None) -> int | None:
-    """Отправка с обработкой типичных ошибок Telegram. Возвращает message_id или None."""
+    """Send a message, handling the usual Telegram errors. Returns message_id or None."""
     for _ in range(3):
         try:
             msg = await bot.send_message(
-                chat_id,
-                text,
-                message_thread_id=thread_id,
-                disable_web_page_preview=True,
+                chat_id, text, message_thread_id=thread_id, disable_web_page_preview=True
             )
             return msg.message_id
         except TelegramRetryAfter as exc:
             await asyncio.sleep(exc.retry_after + 1)
         except TelegramBadRequest as exc:
-            # Тему удалили или закрыли — пишем в общий чат, а не молчим.
+            # The topic was deleted or closed — fall back to the main chat instead of going silent.
             if thread_id and "thread" in str(exc).lower():
-                log.warning("Тема %s в чате %s недоступна, пишу в общий чат", thread_id, chat_id)
+                log.warning(
+                    "Topic %s in chat %s is unavailable, posting to the main chat", thread_id, chat_id
+                )
                 thread_id = None
                 continue
-            log.error("Не удалось отправить в %s: %s", chat_id, exc)
+            log.error("Failed to send to %s: %s", chat_id, exc)
             return None
     return None
 
@@ -67,14 +63,14 @@ class Notifier:
         self._last_prune: datetime | None = None
 
     async def run(self) -> None:
-        log.info("Опрос войн запущен, интервал %s с", self.interval)
+        log.info("War polling started, interval %ss", self.interval)
         while True:
             try:
                 await self.tick()
             except asyncio.CancelledError:
                 raise
             except Exception:
-                log.exception("Ошибка в цикле уведомлений")
+                log.exception("Error in the notification loop")
             await asyncio.sleep(self.interval)
 
     async def tick(self, now: datetime | None = None) -> None:
@@ -88,16 +84,16 @@ class Notifier:
                 wars = await self.wars.active_wars(clan_tag)
             except InvalidIp as exc:
                 log.error(
-                    "Ключ CoC API не подходит для IP этого сервера. Создайте новый ключ "
-                    "на developer.clashofclans.com для текущего IP. Ответ API: %s",
+                    "The CoC API key doesn't allow this server's IP. Create a new key at "
+                    "developer.clashofclans.com for the current IP. API response: %s",
                     exc.message,
                 )
                 return
             except Maintenance:
-                log.info("Clash of Clans на техобслуживании, пропускаю опрос")
+                log.info("Clash of Clans is under maintenance, skipping this poll")
                 return
             except CocApiError as exc:
-                log.warning("Клан %s: %s", clan_tag, exc)
+                log.warning("Clan %s: %s", clan_tag, exc)
                 continue
 
             for war in wars:
@@ -113,33 +109,29 @@ class Notifier:
     async def _notify_chat(self, chat: ChatSettings, war: War, now: datetime, links: dict[str, Link]) -> None:
         sent = await self.db.sent_events(chat.chat_id, war.key)
         events = plan_events(
-            war,
-            now,
-            remind_hours=chat.remind_hours,
-            enabled=enabled_events(chat),
-            already_sent=sent,
+            war, now, remind_hours=chat.remind_hours, enabled=enabled_events(chat), already_sent=sent
         )
+        t = Translator(chat.language)
         for event in events:
-            text = self._render(event, war, now, chat, links)
+            text = self._render(t, event, war, now, chat, links)
             try:
                 message_id = await send_html(self.bot, chat.chat_id, text, chat.thread_id)
             except TelegramForbiddenError:
-                log.warning("Бота удалили из чата %s — отключаю его настройки", chat.chat_id)
+                log.warning("The bot was removed from chat %s — dropping its settings", chat.chat_id)
                 await self.db.delete_chat(chat.chat_id)
                 return
             if message_id:
                 await self.db.mark_sent(chat.chat_id, war.key, event.value)
-                log.info("Чат %s: отправлено %s (%s)", chat.chat_id, event.value, war.key)
+                log.info("Chat %s: sent %s (%s)", chat.chat_id, event.value, war.key)
 
     async def _notify_players(
         self, war: War, now: datetime, links: dict[str, Link], chats: list[ChatSettings]
     ) -> None:
-        """Личные напоминания игрокам, у которых остались атаки."""
+        """Personal reminders for players who still have attacks left."""
         if war.state is not WarState.IN_WAR or not war.end:
             return
         remind_hours = min(c.remind_hours for c in chats)
-        left = war.end - now
-        if not timedelta(0) < left <= timedelta(hours=remind_hours):
+        if not timedelta(0) < war.end - now <= timedelta(hours=remind_hours):
             return
 
         pending = [(m, links[m.tag]) for m in war.members_with_attacks_left() if m.tag in links]
@@ -150,21 +142,26 @@ class Notifier:
             key = dm_event_key(member.tag)
             if key in await self.db.sent_events(link.telegram_id, war.key):
                 continue
+            t = Translator(recipients[link.telegram_id])
             try:
-                message_id = await send_html(self.bot, link.telegram_id, texts.dm_reminder(war, now, member))
+                message_id = await send_html(
+                    self.bot, link.telegram_id, texts.dm_reminder(t, war, now, member)
+                )
             except TelegramForbiddenError:
-                # Человек заблокировал бота — больше не пытаемся.
-                await self.db.toggle_dm_reminders(link.telegram_id)
+                # The user blocked the bot — stop trying.
+                await self.db.disable_dm_reminders(link.telegram_id)
                 continue
             if message_id:
                 await self.db.mark_sent(link.telegram_id, war.key, key)
 
     @staticmethod
-    def _render(event: Event, war: War, now: datetime, chat: ChatSettings, links: dict[str, Link]) -> str:
+    def _render(
+        t: Translator, event: Event, war: War, now: datetime, chat: ChatSettings, links: dict[str, Link]
+    ) -> str:
         if event is Event.PREPARATION:
-            return texts.notify_preparation(war, now)
+            return texts.notify_preparation(t, war, now)
         if event is Event.BATTLE_START:
-            return texts.notify_battle_start(war, now, chat.rules)
+            return texts.notify_battle_start(t, war, now, chat.rules)
         if event is Event.REMINDER:
-            return texts.notify_reminder(war, now, links, use_mentions=chat.mention_players)
-        return texts.notify_war_end(war, now)
+            return texts.notify_reminder(t, war, now, links, use_mentions=chat.mention_players)
+        return texts.notify_war_end(t, war, now)
