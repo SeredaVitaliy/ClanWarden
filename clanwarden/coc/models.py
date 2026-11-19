@@ -126,6 +126,7 @@ class War:
     opponent: WarClan
     is_cwl: bool = False
     war_tag: str | None = None
+    cwl_season: str | None = None
 
     @classmethod
     def from_api(cls, data: dict, *, is_cwl: bool = False, war_tag: str | None = None) -> War:
@@ -178,6 +179,9 @@ class War:
 
     def attacks_left(self, member: WarMember) -> int:
         return max(self.attacks_per_member - len(member.attacks), 0)
+
+    def stars_of(self, member: WarMember) -> int:
+        return sum(a.stars for a in member.attacks)
 
     def members_with_attacks_left(self) -> list[WarMember]:
         return [m for m in self.clan.members if self.attacks_left(m) > 0]

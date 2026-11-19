@@ -61,6 +61,8 @@ class Notifier:
         self.wars = wars
         self.interval = interval
         self._last_prune: datetime | None = None
+        # Wars already written to history in this process — saves a DB round-trip per poll.
+        self._recorded: set[tuple[str, str]] = set()
 
     async def run(self) -> None:
         log.info("War polling started, interval %ss", self.interval)
@@ -97,6 +99,8 @@ class Notifier:
                 continue
 
             for war in wars:
+                if war.state is WarState.ENDED:
+                    await self._record(war)
                 links = await self.db.links_for_tags([m.tag for m in war.clan.members])
                 for chat in chats:
                     await self._notify_chat(chat, war, now, links)
@@ -105,6 +109,14 @@ class Notifier:
         if not self._last_prune or now - self._last_prune > timedelta(days=1):
             await self.db.prune_sent_events()
             self._last_prune = now
+
+    async def _record(self, war: War) -> None:
+        key = (war.key, war.clan.tag)
+        if key in self._recorded:
+            return
+        if await self.db.record_war(war):
+            log.info("War %s saved to history for %s", war.key, war.clan.tag)
+        self._recorded.add(key)
 
     async def _notify_chat(self, chat: ChatSettings, war: War, now: datetime, links: dict[str, Link]) -> None:
         sent = await self.db.sent_events(chat.chat_id, war.key)

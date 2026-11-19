@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from clanwarden.coc.client import CocClient, NotFound
 from clanwarden.coc.models import CwlGroup, CwlStanding, War, WarResult, WarState
@@ -57,12 +57,15 @@ class WarService:
         return None
 
     async def cwl_rounds(self, clan_tag: str) -> tuple[CwlGroup, list[CwlRound]] | None:
-        """Current CWL rounds of our clan: the battle in progress and/or the next preparation.
+        """Our clan's recent CWL rounds: the last finished one, the battle in progress
+        and the next preparation. Returns up to three rounds, the latest last.
 
-        Returns up to two rounds, the latest last.
+        The last finished round matters: when a new round starts, the previous one
+        ends at the same moment, and without it the bot would never see that war as
+        ended — no results notification and no stats.
         """
         group = await self.client.get_league_group(clan_tag)
-        if not group or not group.is_active:
+        if not group:
             return None
 
         found: list[CwlRound] = []
@@ -72,9 +75,11 @@ class WarService:
             war = await self._our_war_in_round(clan_tag, group, index)
             if not war:
                 continue
-            found.append(CwlRound(group=group, round_number=index + 1, war=war))
-            # Earlier rounds only contain finished wars — stop here.
-            if war.state in (WarState.IN_WAR, WarState.ENDED):
+            found.append(
+                CwlRound(group=group, round_number=index + 1, war=replace(war, cwl_season=group.season))
+            )
+            # Everything before the latest finished round is older history — stop here.
+            if war.state is WarState.ENDED:
                 break
         return group, list(reversed(found))
 
@@ -137,7 +142,7 @@ def compute_standings(group: CwlGroup, wars: list[War]) -> list[CwlStanding]:
 
     Score is the sum of stars over all wars plus 10 per war win (as in the game).
     A win only counts once the war has ended. Ties on stars are broken by
-    total destruction.
+    total destruction — the sum of each war's destruction percentage, as in the game.
     """
     table = {c.tag: CwlStanding(tag=c.tag, name=c.name) for c in group.clans}
 
@@ -147,7 +152,7 @@ def compute_standings(group: CwlGroup, wars: list[War]) -> list[CwlStanding]:
         for side in (war.clan, war.opponent):
             row = table.setdefault(side.tag, CwlStanding(tag=side.tag, name=side.name))
             row.stars += side.stars
-            row.destruction += side.destruction * war.team_size
+            row.destruction += side.destruction
         if war.state is WarState.ENDED:
             for side in (war.clan, war.opponent):
                 table[side.tag].wars_played += 1

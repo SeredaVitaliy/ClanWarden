@@ -76,17 +76,31 @@ async def test_current_cwl_finds_our_war_and_orients_it():
     assert rnd.war.opponent.tag == "#C2"
 
 
-async def test_cwl_rounds_returns_prep_and_battle_and_caches_war_tags():
+async def test_cwl_rounds_include_last_finished_round_and_cache_war_tags():
     client = FakeClient(group=make_group(), cwl_wars=CWL_WARS)
     service = WarService(client)
 
     _, rounds = await service.cwl_rounds("#OURS")
-    assert [r.round_number for r in rounds] == [2, 3]
+    # Round 1 just ended — it must be visible, otherwise its results would never be sent.
+    assert [r.round_number for r in rounds] == [1, 2, 3]
+    assert [r.war.state for r in rounds] == [WarState.ENDED, WarState.IN_WAR, WarState.PREPARATION]
+    assert all(r.war.cwl_season == "2026-01" for r in rounds)
 
     client.cwl_calls.clear()
     await service.cwl_rounds("#OURS")
     # The second time our warTags are known — one request per round.
-    assert sorted(client.cwl_calls) == ["#R2A", "#R3A"]
+    assert sorted(client.cwl_calls) == ["#R1B", "#R2A", "#R3A"]
+
+
+async def test_final_round_is_visible_after_the_season_ends():
+    group = make_group() | {"state": "ended"}
+    wars = {tag: cwl_war("warEnded", *sides) for tag, sides in {
+        "#R1A": ("#C2", "#C3"), "#R1B": ("#C4", "#OURS"),
+        "#R2A": ("#C2", "#OURS"), "#R2B": ("#C3", "#C4"),
+        "#R3A": ("#OURS", "#C3"), "#R3B": ("#C2", "#C4"),
+    }.items()}  # fmt: skip
+    _, rounds = await WarService(FakeClient(group=group, cwl_wars=wars)).cwl_rounds("#OURS")
+    assert [r.round_number for r in rounds] == [3]
 
 
 async def test_active_wars_without_cwl():
