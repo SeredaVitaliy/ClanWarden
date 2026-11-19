@@ -274,3 +274,30 @@ async def test_private_start_marks_user(env):
 
     out = await feed(msg_update("hello", chat_id=PLAYER_ID, user_id=PLAYER_ID))
     assert "/menu" in out[0]
+
+
+async def test_stats_command(env):
+    from tests.factories import clan, member
+
+    feed, db, _ = env
+    await db.set_chat_clan(GROUP_ID, "#OURS")
+
+    out = await feed(msg_update("/stats", chat_id=GROUP_ID, user_id=PLAYER_ID))
+    assert "No finished wars recorded yet" in out[0]
+
+    ours = clan("#OURS", "Our Clan", [member("#2PP", "Alice", 1, 2, 3), member("#2PQ", "Bob", 2, 0)], stars=6)
+    await db.record_war(War.from_api(war_json("warEnded", ours=ours, end_in=-timedelta(hours=1))))
+
+    out = await feed(msg_update("/stats", chat_id=GROUP_ID, user_id=PLAYER_ID))
+    assert "1. Alice — ⭐6" in out[0]
+    assert "Bob — 2/2" in out[0]  # missed both attacks
+
+    # "200" is a valid tag syntactically, but a bare number means "how many wars".
+    out = await feed(msg_update("/stats 200", chat_id=GROUP_ID, user_id=PLAYER_ID))
+    assert "wars counted: 1" in out[0]
+
+    out = await feed(msg_update("/stats #2PP", chat_id=GROUP_ID, user_id=PLAYER_ID))
+    assert "Alice" in out[0] and "attacks 2/2" in out[0]
+
+    out = await feed(msg_update("/stats cwl", chat_id=GROUP_ID, user_id=PLAYER_ID))
+    assert "No CWL wars recorded yet" in out[0]

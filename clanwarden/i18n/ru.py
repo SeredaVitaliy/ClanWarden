@@ -55,7 +55,8 @@ STRINGS: dict[str, str] = {
         "<b>Война</b>\n"
         "/war — текущая война или ЛВК\n"
         "/missed — кто ещё не атаковал\n"
-        "/cwl — раунд ЛВК · /cwltable — таблица группы\n\n"
+        "/cwl — раунд ЛВК · /cwltable — таблица группы\n"
+        "/stats — статистика игроков за последние войны (/stats cwl, /stats #ТЕГ)\n\n"
         "<b>Аккаунты</b>\n"
         "/link #ТЕГ — привязать аккаунт игры\n"
         "/unlink #ТЕГ — отвязать\n"
@@ -114,6 +115,7 @@ STRINGS: dict[str, str] = {
     "btn_cwl": "🏆 ЛВК",
     "btn_cwl_table": "📊 Таблица ЛВК",
     "btn_me": "👤 Мои аккаунты",
+    "btn_stats": "📈 Статистика",
     "btn_settings": "⚙️ Настройки",
     "btn_help": "❓ Помощь",
     "btn_refresh": "🔄 Обновить",
@@ -193,6 +195,20 @@ STRINGS: dict[str, str] = {
     # --- язык ---
     "language_choose": "Выберите язык бота:",
     "language_set": "✅ Язык: {name}",
+    # --- статистика ---
+    "stats_title": "📈 <b>{clan}</b> · войн в выборке: {n}",
+    "stats_title_cwl": "📈 <b>{clan}</b> · сезон ЛВК {season}",
+    "stats_record": "Итог: побед <b>{wins}</b> · поражений {losses} · ничьих {ties}",
+    "stats_legend": "<i>⭐ звёзды · ★/атк в среднем за атаку · 💥 среднее разрушение · ❗ пропущено</i>",
+    "stats_missed_title": "❗ <b>Пропущенные атаки</b>",
+    "stats_all_attacked": "🎉 Никто не пропустил атаку.",
+    "stats_empty": "📈 Завершённых войн пока нет в истории. Статистика собирается с момента подключения бота к клану.",
+    "stats_cwl_empty": "📈 Войн ЛВК пока нет в истории.",
+    "stats_player_title": "📈 <b>{name}</b> <code>{tag}</code> · войн в выборке: {n}",
+    "stats_player_totals": "⭐ {stars} · {avg} ★/атк · 💥 {destruction}% · 🔥 на три звезды: {triples} · ❗ пропущено: {missed}",
+    "stats_player_empty": "📈 По <code>{tag}</code> пока нет войн в истории.",
+    "stats_vs": "против {name}",
+    "stats_attacks": "атак {used}/{allowed}",
     # --- описания команд ---
     "cmd_menu": "Меню",
     "cmd_me": "Мои аккаунты и атаки",
@@ -205,5 +221,6 @@ STRINGS: dict[str, str] = {
     "cmd_notify": "Личные напоминания вкл/выкл",
     "cmd_settings": "Настройки (админы)",
     "cmd_language": "Язык",
+    "cmd_stats": "Статистика игроков за последние войны",
     "cmd_help": "Помощь",
 }

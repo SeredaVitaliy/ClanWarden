@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from html import escape
 
 from clanwarden.coc.models import CwlGroup, CwlStanding, War, WarMember, WarResult, WarState
-from clanwarden.db import ChatSettings, Link
+from clanwarden.db import ChatSettings, Link, PlayerStats, PlayerWar, WarRecord
 from clanwarden.i18n import LANGUAGE_NAMES, Translator
 from clanwarden.services.wars import CwlRound
 
@@ -218,6 +218,66 @@ def my_accounts(t: Translator, links: list[Link], war: War | None) -> str:
                 lines.append(t("acc_left", n=left))
     if any(not link.verified for link in links):
         lines.append("\n" + t("acc_unverified_hint"))
+    return "\n".join(lines)
+
+
+# --- stats ---
+
+MAX_STATS_ROWS = 50  # keeps the message well under Telegram's 4096-character limit
+
+
+def clan_stats(
+    t: Translator,
+    clan_name: str,
+    record: WarRecord,
+    players: list[PlayerStats],
+    *,
+    season: str | None = None,
+) -> str:
+    title = (
+        t("stats_title_cwl", clan=e(clan_name), season=e(season))
+        if season
+        else t("stats_title", clan=e(clan_name), n=record.wars)
+    )
+    lines = [title, t("stats_record", wins=record.wins, losses=record.losses, ties=record.ties), ""]
+
+    ranked = sorted(players, key=lambda p: (p.stars, p.avg_destruction), reverse=True)
+    for place, p in enumerate(ranked[:MAX_STATS_ROWS], start=1):
+        line = f"{place}. {e(p.name)} — ⭐{p.stars} · {p.avg_stars:.2f}★/atk · 💥{p.avg_destruction:.0f}%"
+        if p.missed:
+            line += f" · ❗{p.missed}"
+        lines.append(line)
+
+    missed = sorted((p for p in players if p.missed), key=lambda p: p.missed, reverse=True)
+    lines.append("")
+    if missed:
+        lines.append(t("stats_missed_title"))
+        lines += [f"• {e(p.name)} — {p.missed}/{p.attacks_allowed}" for p in missed[:MAX_STATS_ROWS]]
+    else:
+        lines.append(t("stats_all_attacked"))
+    lines.append("\n" + t("stats_legend"))
+    return "\n".join(lines)
+
+
+def player_stats(t: Translator, tag: str, name: str, wars: list[PlayerWar]) -> str:
+    used = sum(w.attacks_used for w in wars)
+    stars = sum(w.stars for w in wars)
+    totals = t(
+        "stats_player_totals",
+        stars=stars,
+        avg=f"{stars / used:.2f}" if used else "0",
+        destruction=f"{sum(w.destruction for w in wars) / used:.0f}" if used else "0",
+        triples=sum(w.triples for w in wars),
+        missed=sum(w.attacks_allowed - w.attacks_used for w in wars),
+    )
+    lines = [t("stats_player_title", name=e(name), tag=e(tag), n=len(wars)), totals, ""]
+    for w in wars:
+        kind = t("kind_cwl") if w.is_cwl else t("kind_war")
+        mark = "❗" if w.attacks_used < w.attacks_allowed else "•"
+        lines.append(
+            f"{mark} {w.ended_at[:10]} {t('stats_vs', name=e(w.opponent_name))} ({kind}) — "
+            f"⭐{w.stars} · {t('stats_attacks', used=w.attacks_used, allowed=w.attacks_allowed)}"
+        )
     return "\n".join(lines)
 
 

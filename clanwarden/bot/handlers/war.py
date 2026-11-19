@@ -14,6 +14,7 @@ from clanwarden.bot import views
 from clanwarden.bot.helpers import UserFacingError, api_error_key, is_admin, is_group, reply, resolve_clan
 from clanwarden.bot.keyboards import MenuCb, back_button, main_menu, settings_menu
 from clanwarden.coc.client import CocApiError, CocClient
+from clanwarden.coc.tags import normalize_tag
 from clanwarden.db import ChatSettings, Database
 from clanwarden.i18n import Translator
 from clanwarden.services.wars import WarService
@@ -35,6 +36,8 @@ async def render(
     try:
         if action == "me":
             return await views.view_me(t, wars, db, coc, user_id)
+        if action == "stats":
+            return await _render_stats(t, arg, chat=chat, user_id=user_id, db=db, coc=coc)
         clan_tag = await resolve_clan(arg=arg, chat=chat, user_id=user_id, db=db, client=coc)
         if action == "war":
             return await views.view_war(t, wars, clan_tag)
@@ -51,6 +54,27 @@ async def render(
     raise ValueError(f"Unknown action {action}")
 
 
+async def _render_stats(
+    t: Translator,
+    arg: str | None,
+    *,
+    chat: ChatSettings | None,
+    user_id: int | None,
+    db: Database,
+    coc: CocClient,
+) -> str:
+    """`/stats [N] [cwl]` for the clan, `/stats #TAG` for one player.
+
+    Numbers are checked first: "200" is also a syntactically valid tag.
+    """
+    args = (arg or "").split()
+    for word in args:
+        if not word.isdigit() and word.lower() != "cwl" and (tag := normalize_tag(word)):
+            return await views.view_player_stats(t, db, tag)
+    clan_tag = await resolve_clan(arg=None, chat=chat, user_id=user_id, db=db, client=coc)
+    return await views.view_stats(t, db, coc, clan_tag, args)
+
+
 async def clan_name(coc: CocClient, chat: ChatSettings) -> str | None:
     if not chat.clan_tag:
         return None
@@ -59,7 +83,7 @@ async def clan_name(coc: CocClient, chat: ChatSettings) -> str | None:
     return None
 
 
-@router.message(Command("war", "missed", "cwl", "cwltable", "me"))
+@router.message(Command("war", "missed", "cwl", "cwltable", "me", "stats"))
 async def cmd_war(
     message: Message,
     command: CommandObject,

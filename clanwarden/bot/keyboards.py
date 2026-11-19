@@ -41,6 +41,7 @@ def main_menu(t: Translator, is_group: bool) -> InlineKeyboardMarkup:
     kb.button(text=t("btn_missed"), callback_data=MenuCb(action="missed"))
     kb.button(text=t("btn_cwl"), callback_data=MenuCb(action="cwl"))
     kb.button(text=t("btn_cwl_table"), callback_data=MenuCb(action="cwltable"))
+    kb.button(text=t("btn_stats"), callback_data=MenuCb(action="stats"))
     kb.button(text=t("btn_me"), callback_data=MenuCb(action="me"))
     if is_group:
         kb.button(text=t("btn_settings"), callback_data=MenuCb(action="settings"))
