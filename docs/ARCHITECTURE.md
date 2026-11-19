@@ -71,6 +71,16 @@ All user-facing text lives in `clanwarden/i18n/en.py` and `ru.py` under keys. Th
 
 Background notifications use the group's language; personal reminders use the player's. A missing key falls back to English, so a partial translation never breaks the bot, and a test asserts that all catalogs share the same keys and placeholders. Telegram's "/" command menu is registered in every language too (`set_my_commands` with `language_code`).
 
+### War history and stats
+
+The game API only returns the *current* war; `/warlog` has no per-player data. So the bot keeps its own history: whenever the notifier sees a war in the `warEnded` state, it stores the war (`wars`) and every member's attacks (`war_members`). Writes are idempotent (`INSERT OR IGNORE` on the war key), and an in-memory set avoids touching the database on every poll. `/stats` is plain SQL aggregation over the last N wars or one CWL season.
+
+The same change fixed a real gap: when a CWL round starts, the previous one ends at the same moment, so a poller that only looks at "in war" and "preparation" never sees a CWL war as ended. `cwl_rounds` now also returns the latest finished round (and keeps working after the group's season has ended), which makes both round results and stats possible.
+
+### README images
+
+`scripts/render_previews.py` builds demo wars, runs them through the real `texts` functions in both languages and screenshots the result with headless Chromium. The images in the README therefore always match what the bot actually sends — rendering them even caught a bug in the CWL destruction total.
+
 ### Why SQLite
 
 The bot ships as a single container for a small VPS and writes a few dozen rows a minute. A separate database server would only make installation harder. Migrations are versioned with `PRAGMA user_version`.
@@ -92,13 +102,13 @@ The API client, database and services are created in `app.py` and stored in the 
 | `test_wars_service.py` | finding our CWL war, warTag caching, standings with bonuses |
 | `test_client.py` | HTTP client against a fake server: errors, caching, verifytoken |
 | `test_texts.py` | HTML escaping, mentions, localization, catalog key parity |
-| `test_db.py` | migrations, links, journal |
+| `test_db.py` | migrations, links, journal, war history and stats aggregation |
 | `test_notifier.py` | notification loop: no duplicates, mentions, DMs, topics |
-| `test_bot_smoke.py` | end-to-end aiogram run on fake updates: permissions, topics, buttons, language switching |
+| `test_bot_smoke.py` | end-to-end aiogram run on fake updates: permissions, topics, buttons, language switching, `/stats` |
 
 ## Possible next steps
 
-- Per-player war statistics (average stars, missed attacks) and an end-of-season summary.
+- Automatic end-of-season CWL summary posted to the group.
 - More languages — just add a catalog file.
 - Automatic API key rotation via the developer account login, for servers with a dynamic IP.
 - Webhooks instead of long polling for large installations.
