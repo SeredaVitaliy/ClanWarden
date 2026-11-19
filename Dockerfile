@@ -2,7 +2,7 @@ FROM python:3.13-slim
 
 LABEL org.opencontainers.image.title="Clan Warden" \
       org.opencontainers.image.description="Self-hosted Clash of Clans Telegram bot" \
-      org.opencontainers.image.source="https://github.com/SeredaVitaliy/clan-warden" \
+      org.opencontainers.image.source="https://github.com/SeredaVitaliy/ClanWarden" \
       org.opencontainers.image.licenses="MIT"
 
 ENV PYTHONDONTWRITEBYTECODE=1 \

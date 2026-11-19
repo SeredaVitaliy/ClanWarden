@@ -1,9 +1,9 @@
 services:
   bot:
-    image: ghcr.io/seredavitaliy/clan-warden:latest
+    image: ghcr.io/seredavitaliy/clanwarden:latest
     # To build from source instead of pulling the image: docker compose up -d --build
     build: .
-    container_name: clan-warden
+    container_name: clanwarden
     restart: unless-stopped
     env_file: .env
     volumes:

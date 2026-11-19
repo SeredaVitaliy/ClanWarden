@@ -1,6 +1,6 @@
 # Clan Warden — Clash of Clans Telegram Bot
 
-[![CI](https://github.com/SeredaVitaliy/clan-warden/actions/workflows/ci.yml/badge.svg)](https://github.com/SeredaVitaliy/clan-warden/actions/workflows/ci.yml)
+[![CI](https://github.com/SeredaVitaliy/ClanWarden/actions/workflows/ci.yml/badge.svg)](https://github.com/SeredaVitaliy/ClanWarden/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -74,8 +74,8 @@ Message [@BotFather](https://t.me/BotFather) → `/newbot` → save the token.
 #### 3. Run
 
 ```bash
-git clone https://github.com/SeredaVitaliy/clan-warden.git
-cd clan-warden
+git clone https://github.com/SeredaVitaliy/ClanWarden.git
+cd ClanWarden
 cp .env.example .env
 nano .env          # set TELEGRAM_BOT_TOKEN and COC_API_TOKEN
 
@@ -249,8 +249,8 @@ Legion vs Raiders · ЛВК, раунд 3, 15×15
 #### 3. Запуск
 
 ```bash
-git clone https://github.com/SeredaVitaliy/clan-warden.git
-cd clan-warden
+git clone https://github.com/SeredaVitaliy/ClanWarden.git
+cd ClanWarden
 cp .env.example .env
 nano .env          # вставьте TELEGRAM_BOT_TOKEN и COC_API_TOKEN
 
