@@ -1,15 +1,23 @@
 # секреты
 .env
 
-# локальная база привязок (реальные Telegram ID)
+# данные бота (реальные Telegram ID игроков)
+data/
 *.db
 *.db-journal
+*.db-wal
+*.db-shm
 
 # Python
 __pycache__/
 *.pyc
+*.egg-info/
 .venv/
 venv/
+.pytest_cache/
+.ruff_cache/
 
 # системное
 .DS_Store
+.idea/
+.vscode/
