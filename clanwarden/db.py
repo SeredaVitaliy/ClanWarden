@@ -13,6 +13,8 @@ from pathlib import Path
 
 import aiosqlite
 
+from clanwarden.coc.models import War
+
 MIGRATIONS: list[str] = [
     # 1: base schema
     """
@@ -64,6 +66,42 @@ MIGRATIONS: list[str] = [
     ALTER TABLE chats ADD COLUMN language TEXT;
     ALTER TABLE users ADD COLUMN language TEXT;
     """,
+    # 3: war history for /stats. A war between two tracked clans is stored from
+    # each side, hence clan_tag in the keys.
+    """
+    CREATE TABLE wars (
+        war_key              TEXT NOT NULL,
+        clan_tag             TEXT NOT NULL,
+        opponent_tag         TEXT,
+        opponent_name        TEXT,
+        is_cwl               INTEGER NOT NULL,
+        cwl_season           TEXT,
+        team_size            INTEGER NOT NULL,
+        stars                INTEGER NOT NULL,
+        opponent_stars       INTEGER NOT NULL,
+        destruction          REAL NOT NULL,
+        opponent_destruction REAL NOT NULL,
+        result               TEXT NOT NULL,
+        ended_at             TEXT NOT NULL,
+        PRIMARY KEY (war_key, clan_tag)
+    );
+    CREATE INDEX idx_wars_clan ON wars (clan_tag, ended_at);
+
+    CREATE TABLE war_members (
+        war_key         TEXT NOT NULL,
+        clan_tag        TEXT NOT NULL,
+        player_tag      TEXT NOT NULL,
+        player_name     TEXT NOT NULL,
+        townhall        INTEGER NOT NULL,
+        attacks_allowed INTEGER NOT NULL,
+        attacks_used    INTEGER NOT NULL,
+        stars           INTEGER NOT NULL,
+        triples         INTEGER NOT NULL,
+        destruction     REAL NOT NULL,
+        PRIMARY KEY (war_key, clan_tag, player_tag)
+    );
+    CREATE INDEX idx_war_members_player ON war_members (player_tag);
+    """,
 ]
 
 CHAT_TOGGLES = ("notify_prep", "notify_start", "notify_remind", "notify_end", "mention_players")
@@ -100,6 +138,54 @@ class ChatSettings:
             rules=row["rules"],
             language=row["language"],
         )
+
+
+@dataclass(frozen=True)
+class WarRecord:
+    wars: int
+    wins: int
+    losses: int
+    ties: int
+
+
+@dataclass(frozen=True)
+class PlayerStats:
+    """A player's totals over a set of wars."""
+
+    tag: str
+    name: str
+    wars: int
+    attacks_used: int
+    attacks_allowed: int
+    stars: int
+    triples: int
+    destruction: float
+
+    @property
+    def missed(self) -> int:
+        return self.attacks_allowed - self.attacks_used
+
+    @property
+    def avg_stars(self) -> float:
+        return self.stars / self.attacks_used if self.attacks_used else 0.0
+
+    @property
+    def avg_destruction(self) -> float:
+        return self.destruction / self.attacks_used if self.attacks_used else 0.0
+
+
+@dataclass(frozen=True)
+class PlayerWar:
+    """One war from a player's history."""
+
+    opponent_name: str
+    is_cwl: bool
+    ended_at: str
+    attacks_used: int
+    attacks_allowed: int
+    stars: int
+    triples: int
+    destruction: float
 
 
 @dataclass(frozen=True)
@@ -307,6 +393,128 @@ class Database:
             telegram_ids,
         ) as cur:
             return {r[0]: r[1] for r in await cur.fetchall()}
+
+    # --- war history ---
+
+    async def record_war(self, war: War) -> bool:
+        """Store a finished war and every member's attacks. Idempotent; True if newly stored."""
+        moment = war.end or war.start or war.preparation_start
+        ended_at = moment.isoformat() if moment else ""
+        cur = await self.conn.execute(
+            """
+            INSERT OR IGNORE INTO wars (
+                war_key, clan_tag, opponent_tag, opponent_name, is_cwl, cwl_season, team_size,
+                stars, opponent_stars, destruction, opponent_destruction, result, ended_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                war.key, war.clan.tag, war.opponent.tag, war.opponent.name, int(war.is_cwl),
+                war.cwl_season, war.team_size, war.clan.stars, war.opponent.stars,
+                war.clan.destruction, war.opponent.destruction, war.result.value, ended_at,
+            ),
+        )  # fmt: skip
+        if cur.rowcount == 0:
+            await self.conn.commit()
+            return False
+        await self.conn.executemany(
+            """
+            INSERT OR IGNORE INTO war_members (
+                war_key, clan_tag, player_tag, player_name, townhall,
+                attacks_allowed, attacks_used, stars, triples, destruction
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    war.key,
+                    war.clan.tag,
+                    m.tag,
+                    m.name,
+                    m.townhall,
+                    war.attacks_per_member,
+                    len(m.attacks),
+                    war.stars_of(m),
+                    sum(1 for a in m.attacks if a.stars == 3),
+                    sum(a.destruction for a in m.attacks),
+                )  # fmt: skip
+                for m in war.clan.members
+            ],
+        )
+        await self.conn.commit()
+        return True
+
+    @staticmethod
+    def _wars_filter(cwl_season: str | None) -> tuple[str, tuple]:
+        if cwl_season:
+            return "AND is_cwl = 1 AND cwl_season = ?", (cwl_season,)
+        return "", ()
+
+    async def war_record(self, clan_tag: str, limit: int, cwl_season: str | None = None) -> WarRecord:
+        extra, params = self._wars_filter(cwl_season)
+        async with self.conn.execute(
+            f"""
+            SELECT result, COUNT(*) FROM (
+                SELECT result FROM wars WHERE clan_tag = ? {extra} ORDER BY ended_at DESC LIMIT ?
+            ) GROUP BY result
+            """,
+            (clan_tag, *params, limit),
+        ) as cur:
+            counts = {row[0]: row[1] for row in await cur.fetchall()}
+        wins, losses, ties = counts.get("win", 0), counts.get("lose", 0), counts.get("tie", 0)
+        return WarRecord(wars=wins + losses + ties, wins=wins, losses=losses, ties=ties)
+
+    async def clan_player_stats(
+        self, clan_tag: str, limit: int, cwl_season: str | None = None
+    ) -> list[PlayerStats]:
+        """Per-player totals over the clan's last `limit` recorded wars (or one CWL season)."""
+        extra, params = self._wars_filter(cwl_season)
+        async with self.conn.execute(
+            f"""
+            WITH recent AS (
+                SELECT war_key FROM wars WHERE clan_tag = ? {extra} ORDER BY ended_at DESC LIMIT ?
+            )
+            SELECT player_tag,
+                   (SELECT player_name FROM war_members m2 JOIN wars w2 USING (war_key, clan_tag)
+                    WHERE m2.player_tag = m.player_tag ORDER BY w2.ended_at DESC LIMIT 1),
+                   COUNT(*), SUM(attacks_used), SUM(attacks_allowed), SUM(stars), SUM(triples),
+                   SUM(destruction)
+            FROM war_members m
+            WHERE clan_tag = ? AND war_key IN (SELECT war_key FROM recent)
+            GROUP BY player_tag
+            """,
+            (clan_tag, *params, limit, clan_tag),
+        ) as cur:
+            return [PlayerStats(*row) for row in await cur.fetchall()]
+
+    async def player_wars(self, player_tag: str, limit: int) -> list[PlayerWar]:
+        async with self.conn.execute(
+            """
+            SELECT w.opponent_name, w.is_cwl, w.ended_at, m.attacks_used, m.attacks_allowed,
+                   m.stars, m.triples, m.destruction
+            FROM war_members m JOIN wars w USING (war_key, clan_tag)
+            WHERE m.player_tag = ?
+            ORDER BY w.ended_at DESC LIMIT ?
+            """,
+            (player_tag, limit),
+        ) as cur:
+            return [PlayerWar(r[0], bool(r[1]), *r[2:]) for r in await cur.fetchall()]
+
+    async def player_name(self, player_tag: str) -> str | None:
+        async with self.conn.execute(
+            """
+            SELECT m.player_name FROM war_members m JOIN wars w USING (war_key, clan_tag)
+            WHERE m.player_tag = ? ORDER BY w.ended_at DESC LIMIT 1
+            """,
+            (player_tag,),
+        ) as cur:
+            row = await cur.fetchone()
+        return row[0] if row else None
+
+    async def latest_cwl_season(self, clan_tag: str) -> str | None:
+        async with self.conn.execute(
+            "SELECT MAX(cwl_season) FROM wars WHERE clan_tag = ? AND is_cwl = 1", (clan_tag,)
+        ) as cur:
+            row = await cur.fetchone()
+        return row[0] if row else None
 
     # --- notification journal ---
 

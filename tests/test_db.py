@@ -58,3 +58,42 @@ async def test_sent_events_journal(db):
     await db.mark_sent(-100, "war:1", "start")  # a duplicate is fine
     assert await db.sent_events(-100, "war:1") == {"start"}
     assert await db.sent_events(-100, "war:2") == set()
+
+
+async def test_war_history_and_stats(db):
+    from datetime import timedelta
+
+    from clanwarden.coc.models import War
+    from tests.factories import clan, member, war_json
+
+    def finished_war(days_ago, alice_attacks, alice_stars, bob_attacks, result_stars):
+        ours = clan(
+            "#OURS",
+            "Our Clan",
+            [member("#P1", "Alice", 1, alice_attacks, alice_stars), member("#P2", "Bob", 2, bob_attacks, 3)],
+            stars=result_stars,
+        )
+        return War.from_api(war_json("warEnded", ours=ours, end_in=-timedelta(days=days_ago)))
+
+    old = finished_war(10, 2, 2, 0, 1)  # 1 star vs 0 for the opponent: a win
+    recent = finished_war(1, 2, 3, 1, 6)
+
+    assert await db.record_war(old) is True
+    assert await db.record_war(old) is False  # idempotent
+    await db.record_war(recent)
+
+    record = await db.war_record("#OURS", limit=10)
+    assert (record.wars, record.wins) == (2, 2)
+
+    stats = {s.tag: s for s in await db.clan_player_stats("#OURS", limit=10)}
+    alice, bob = stats["#P1"], stats["#P2"]
+    assert (alice.wars, alice.attacks_used, alice.stars, alice.triples) == (2, 4, 10, 2)
+    assert alice.avg_stars == 2.5
+    assert (bob.attacks_used, bob.missed) == (1, 3)
+
+    # Only the last war.
+    last = {s.tag: s for s in await db.clan_player_stats("#OURS", limit=1)}
+    assert last["#P1"].stars == 6
+
+    history = await db.player_wars("#P1", limit=5)
+    assert [h.stars for h in history] == [6, 4]

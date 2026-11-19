@@ -23,6 +23,7 @@ You run it on your own server with a single command: `docker compose up -d`.
 - **Mentions:** players link their game account to Telegram, so the bot pings exactly the people who still have attacks left.
 - **Personal reminders:** if your account still has an attack, the bot messages you privately.
 - **Clan War League:** the current round with the correct opponent, plus group standings with the +10 stars war-win bonus.
+- **Player stats:** stars, average per attack, destruction and missed attacks for every player over recent wars or a CWL season — plus each player's own war history. The game API has no per-player war history, so stats are collected from the moment the bot is connected.
 - **Many clans, one bot:** a single running bot can serve several groups, each with its own clan and settings.
 - **Forum topics:** the bot can be limited to one topic so it doesn't get in the way of other conversations.
 - **Account verification:** nobody can claim someone else's tag; ownership is proven with the API token from the game settings.
@@ -32,28 +33,11 @@ You run it on your own server with a single command: `docker compose up -d`.
 
 ### What it looks like
 
-```
-⏰ 2h 41m left in the war!
-Legion vs Dark Empire · War, 15×15
+<p align="center">
+  <img src="docs/images/preview-en.png" width="420" alt="Clan Warden messages: war reminder with mentions, CWL round, CWL standings, player stats and group settings">
+</p>
 
-❗ Haven't attacked yet:
-4. Alex — 2 left        ← clickable name, Telegram notifies the player
-9. Snow — 1 left
-12. Maria — 1 left
-
-Not linked to Telegram: 1. Link with /link #TAG
-```
-
-```
-🏆 Clan War League · season 2026-11 · round 3/7
-
-⚔️ Battle day
-Legion vs Raiders · CWL, round 3, 15×15
-⏳ War ends in: 11h 5m
-
-⭐ 21 : 18   💥 74.3% : 65.0%
-🗡 Attacks: 9/15 : 8/15
-```
+<sub>Rendered from the bot's real message templates with demo data by <code>scripts/render_previews.py</code>.</sub>
 
 ### Installation
 
@@ -119,6 +103,7 @@ For a long-running setup, wrap it in a systemd service.
 | `/war` | anywhere | current war or CWL round: score, attacks, time left |
 | `/missed` | anywhere | who hasn't used their attacks yet |
 | `/cwl` · `/cwltable` | anywhere | CWL round · group standings |
+| `/stats` | anywhere | player stats over the last 10 wars; `/stats 20`, `/stats cwl` (current CWL season), `/stats #TAG` (one player) |
 | `/me` | anywhere | my accounts and my attacks in the current war |
 | `/link #TAG [TOKEN]` | anywhere | link an account (with a token, verified) |
 | `/unlink [#TAG]` | anywhere | unlink an account |
@@ -172,6 +157,7 @@ pip install -r requirements-dev.txt
 pytest            # tests
 ruff check .      # linter
 ruff format .     # formatter
+python scripts/render_previews.py   # regenerate README images (needs playwright)
 ```
 
 How the project is built and why: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
@@ -198,6 +184,7 @@ Self-hosted **Telegram-бот для кланов Clash of Clans** (тг бот 
 - **Упоминания:** игроки привязывают аккаунт игры к Telegram, и бот зовёт именно тех, у кого остались атаки.
 - **Личные напоминания:** если у твоего аккаунта осталась атака, бот напишет в личку.
 - **ЛВК:** текущий раунд с правильным соперником и таблица группы с бонусом +10 звёзд за победу.
+- **Статистика игроков:** звёзды, среднее за атаку, разрушение и пропущенные атаки каждого игрока за последние войны или сезон ЛВК, плюс личная история войн игрока. API игры не отдаёт историю атак по игрокам, поэтому статистика копится с момента подключения бота.
 - **Несколько кланов на одном боте:** один запущенный бот обслуживает несколько групп, у каждой свой клан и свои настройки.
 - **Темы (форумы):** бот работает только в выбранной теме и не мешает остальной переписке.
 - **Подтверждение аккаунта:** чужой тег нельзя «занять», владение подтверждается API-токеном из настроек игры.
@@ -207,28 +194,11 @@ Self-hosted **Telegram-бот для кланов Clash of Clans** (тг бот 
 
 ### Как это выглядит
 
-```
-⏰ До конца войны 2ч 41м!
-Legion vs Dark Empire · КВ, 15×15
+<p align="center">
+  <img src="docs/images/preview-ru.png" width="420" alt="Сообщения Clan Warden: напоминание с упоминаниями, раунд ЛВК, таблица ЛВК, статистика игроков и настройки группы">
+</p>
 
-❗ Ещё не атаковали:
-4. Alex — осталось 2        ← имя кликабельное, Telegram пришлёт игроку уведомление
-9. Snow — осталось 1
-12. Maria — осталось 1
-
-Без привязки к Telegram: 1. Привязать: /link #ТЕГ
-```
-
-```
-🏆 Лига войн кланов · сезон 2026-11 · раунд 3/7
-
-⚔️ День атак
-Legion vs Raiders · ЛВК, раунд 3, 15×15
-⏳ До конца войны: 11ч 5м
-
-⭐ 21 : 18   💥 74.3% : 65.0%
-🗡 Атаки: 9/15 : 8/15
-```
+<sub>Картинка собрана из настоящих шаблонов сообщений бота на демо-данных скриптом <code>scripts/render_previews.py</code>.</sub>
 
 ### Установка
 
@@ -294,6 +264,7 @@ python -m clanwarden
 | `/war` | везде | текущая война или раунд ЛВК: счёт, атаки, оставшееся время |
 | `/missed` | везде | кто ещё не провёл атаки |
 | `/cwl` · `/cwltable` | везде | раунд ЛВК · таблица группы |
+| `/stats` | везде | статистика игроков за последние 10 войн; `/stats 20`, `/stats cwl` (текущий сезон ЛВК), `/stats #ТЕГ` (один игрок) |
 | `/me` | везде | мои аккаунты и мои атаки в текущей войне |
 | `/link #ТЕГ [ТОКЕН]` | везде | привязать аккаунт (с токеном — подтверждённо) |
 | `/unlink [#ТЕГ]` | везде | отвязать аккаунт |
@@ -347,6 +318,7 @@ pip install -r requirements-dev.txt
 pytest            # тесты
 ruff check .      # линтер
 ruff format .     # форматирование
+python scripts/render_previews.py   # перегенерировать картинки README (нужен playwright)
 ```
 
 Как устроен проект и почему именно так: [docs/ARCHITECTURE.ru.md](docs/ARCHITECTURE.ru.md).

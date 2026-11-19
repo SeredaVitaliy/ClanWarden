@@ -55,7 +55,8 @@ STRINGS: dict[str, str] = {
         "<b>War</b>\n"
         "/war — current war or CWL round\n"
         "/missed — who hasn't attacked yet\n"
-        "/cwl — CWL round · /cwltable — group standings\n\n"
+        "/cwl — CWL round · /cwltable — group standings\n"
+        "/stats — player stats over recent wars (/stats cwl, /stats #TAG)\n\n"
         "<b>Accounts</b>\n"
         "/link #TAG — link your game account\n"
         "/unlink #TAG — unlink it\n"
@@ -114,6 +115,7 @@ STRINGS: dict[str, str] = {
     "btn_cwl": "🏆 CWL",
     "btn_cwl_table": "📊 CWL standings",
     "btn_me": "👤 My accounts",
+    "btn_stats": "📈 Stats",
     "btn_settings": "⚙️ Settings",
     "btn_help": "❓ Help",
     "btn_refresh": "🔄 Refresh",
@@ -192,6 +194,20 @@ STRINGS: dict[str, str] = {
     # --- language ---
     "language_choose": "Choose the bot language:",
     "language_set": "✅ Language: {name}",
+    # --- stats ---
+    "stats_title": "📈 <b>{clan}</b> · wars counted: {n}",
+    "stats_title_cwl": "📈 <b>{clan}</b> · CWL season {season}",
+    "stats_record": "Record: <b>{wins}W</b> · {losses}L · {ties}D",
+    "stats_legend": "<i>⭐ stars · ★/atk average per attack · 💥 average destruction · ❗ missed</i>",
+    "stats_missed_title": "❗ <b>Missed attacks</b>",
+    "stats_all_attacked": "🎉 Nobody missed an attack.",
+    "stats_empty": "📈 No finished wars recorded yet. Stats are collected from the moment the bot is connected to the clan.",
+    "stats_cwl_empty": "📈 No CWL wars recorded yet.",
+    "stats_player_title": "📈 <b>{name}</b> <code>{tag}</code> · wars counted: {n}",
+    "stats_player_totals": "⭐ {stars} · {avg} ★/atk · 💥 {destruction}% · 🔥 {triples} triples · ❗ {missed} missed",
+    "stats_player_empty": "📈 No recorded wars for <code>{tag}</code> yet.",
+    "stats_vs": "vs {name}",
+    "stats_attacks": "attacks {used}/{allowed}",
     # --- bot command descriptions ---
     "cmd_menu": "Menu",
     "cmd_me": "My accounts and attacks",
@@ -204,5 +220,6 @@ STRINGS: dict[str, str] = {
     "cmd_notify": "Personal reminders on/off",
     "cmd_settings": "Settings (admins)",
     "cmd_language": "Language",
+    "cmd_stats": "Player stats over recent wars",
     "cmd_help": "Help",
 }

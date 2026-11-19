@@ -22,8 +22,32 @@ from clanwarden.services.wars import WarService
 
 log = logging.getLogger(__name__)
 
-PRIVATE_COMMANDS = ("menu", "me", "war", "missed", "cwl", "link", "unlink", "notify", "language", "help")
-GROUP_COMMANDS = ("war", "missed", "cwl", "cwltable", "me", "link", "menu", "settings", "language", "help")
+PRIVATE_COMMANDS = (
+    "menu",
+    "me",
+    "war",
+    "missed",
+    "cwl",
+    "stats",
+    "link",
+    "unlink",
+    "notify",
+    "language",
+    "help",
+)
+GROUP_COMMANDS = (
+    "war",
+    "missed",
+    "cwl",
+    "cwltable",
+    "stats",
+    "me",
+    "link",
+    "menu",
+    "settings",
+    "language",
+    "help",
+)
 
 
 def build_dispatcher(db: Database | None, coc: CocClient | None, wars: WarService | None) -> Dispatcher:

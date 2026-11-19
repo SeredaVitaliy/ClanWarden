@@ -52,6 +52,43 @@ async def view_cwl_table(t: Translator, wars: WarService, clan_tag: str) -> str:
     return texts.cwl_table(t, group, standings, clan_tag)
 
 
+DEFAULT_STATS_WARS = 10
+MAX_STATS_WARS = 50
+
+
+async def view_stats(t: Translator, db: Database, coc: CocClient, clan_tag: str, args: list[str]) -> str:
+    """Clan stats: `/stats`, `/stats 20` (number of wars), `/stats cwl` (current CWL season)."""
+    limit = DEFAULT_STATS_WARS
+    for arg in args:
+        if arg.isdigit():
+            limit = max(1, min(int(arg), MAX_STATS_WARS))
+
+    season = None
+    if "cwl" in (a.lower() for a in args):
+        season = await db.latest_cwl_season(clan_tag)
+        if not season:
+            return t("stats_cwl_empty")
+        limit = MAX_STATS_WARS  # the season filter already narrows it down to at most 7 wars
+
+    record = await db.war_record(clan_tag, limit, cwl_season=season)
+    if not record.wars:
+        return t("stats_empty")
+    players = await db.clan_player_stats(clan_tag, limit, cwl_season=season)
+    try:
+        clan_name = (await coc.get_clan(clan_tag)).name
+    except CocApiError:
+        clan_name = clan_tag
+    return texts.clan_stats(t, clan_name, record, players, season=season)
+
+
+async def view_player_stats(t: Translator, db: Database, player_tag: str) -> str:
+    wars = await db.player_wars(player_tag, DEFAULT_STATS_WARS)
+    if not wars:
+        return t("stats_player_empty", tag=texts.e(player_tag))
+    name = await db.player_name(player_tag) or player_tag
+    return texts.player_stats(t, player_tag, name, wars)
+
+
 async def view_me(t: Translator, wars: WarService, db: Database, client: CocClient, user_id: int) -> str:
     links = await db.user_links(user_id)
     war = None

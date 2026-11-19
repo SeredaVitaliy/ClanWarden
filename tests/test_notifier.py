@@ -70,3 +70,5 @@ async def test_one_api_call_per_clan_for_many_chats(db):
 
     assert wars.calls == 1
     assert sorted(m[0] for m in bot.sent) == [-200, -100]
+    # The finished war is saved to history once, not once per chat.
+    assert (await db.war_record("#OURS", limit=10)).wars == 1
